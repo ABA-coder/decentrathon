@@ -1,0 +1,2616 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ProcureAI KZ — Система анализа госзакупок</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Onest:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════════════════ */
+:root {
+  --bg-base:    #080b0f;
+  --bg-surface: #0d1117;
+  --bg-raised:  #131920;
+  --bg-hover:   #181f28;
+  --bg-active:  #1c2430;
+
+  --border:     rgba(255,255,255,.07);
+  --border-md:  rgba(255,255,255,.11);
+  --border-lg:  rgba(255,255,255,.18);
+
+  --text-primary:   #dde3ec;
+  --text-secondary: #7a8799;
+  --text-muted:     #404c5a;
+  --text-label:     #4e5d6e;
+
+  --red:         #f04f43;
+  --red-soft:    rgba(240,79,67,.12);
+  --red-border:  rgba(240,79,67,.25);
+
+  --amber:       #e09a2e;
+  --amber-soft:  rgba(224,154,46,.12);
+  --amber-border:rgba(224,154,46,.25);
+
+  --yellow:      #c9b93a;
+  --yellow-soft: rgba(201,185,58,.10);
+
+  --green:       #27a862;
+  --green-soft:  rgba(39,168,98,.12);
+  --green-border:rgba(39,168,98,.25);
+
+  --blue:        #3b7dd8;
+  --blue-soft:   rgba(59,125,216,.12);
+  --blue-border: rgba(59,125,216,.25);
+
+  --accent:      #4d8ef5;
+  --accent-hover:#5a9aff;
+
+  --font-ui:   'Onest', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --radius-sm: 4px;
+  --radius-md: 7px;
+  --radius-lg: 10px;
+
+  --sidebar-w: 228px;
+  --topbar-h:  50px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   RESET & BASE
+═══════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { font-size: 14px; }
+
+body {
+  font-family: var(--font-ui);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  display: flex;
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+button { cursor: pointer; font-family: var(--font-ui); }
+input, select, textarea { font-family: var(--font-ui); }
+
+/* ═══════════════════════════════════════════════════════
+   SCROLLBAR
+═══════════════════════════════════════════════════════ */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-active); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-lg); }
+
+/* ═══════════════════════════════════════════════════════
+   SIDEBAR
+═══════════════════════════════════════════════════════ */
+#sidebar {
+  width: var(--sidebar-w);
+  min-height: 100vh;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0; left: 0; bottom: 0;
+  z-index: 200;
+}
+
+.sidebar-brand {
+  padding: 18px 16px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 30px; height: 30px;
+  background: linear-gradient(135deg, var(--accent), #2b5fd9);
+  border-radius: var(--radius-md);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.brand-mark svg { width: 16px; height: 16px; stroke: #fff; fill: none; stroke-width: 2; }
+
+.brand-name { font-size: 13px; font-weight: 600; letter-spacing: .01em; }
+.brand-sub  { font-size: 10px; color: var(--text-muted); letter-spacing: .06em; text-transform: uppercase; font-family: var(--font-mono); margin-top: 1px; }
+
+.nav-section {
+  padding: 20px 0 6px;
+}
+
+.nav-label {
+  font-size: 10px;
+  color: var(--text-label);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  padding: 0 16px 6px;
+  display: block;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: color .15s, background .15s;
+  user-select: none;
+}
+.nav-item:hover { color: var(--text-primary); background: var(--bg-raised); }
+.nav-item.active {
+  color: var(--accent);
+  background: var(--blue-soft);
+  border-left-color: var(--accent);
+}
+.nav-item svg { width: 14px; height: 14px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 1.6; opacity: .8; }
+.nav-item.active svg { opacity: 1; }
+
+.nav-badge {
+  margin-left: auto;
+  background: var(--red-soft);
+  color: var(--red);
+  border: 1px solid var(--red-border);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  padding: 1px 6px;
+  border-radius: 10px;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.status-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  flex-shrink: 0;
+}
+
+/* ═══════════════════════════════════════════════════════
+   MAIN LAYOUT
+═══════════════════════════════════════════════════════ */
+#main {
+  margin-left: var(--sidebar-w);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+#topbar {
+  height: var(--topbar-h);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.topbar-breadcrumb { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+.topbar-sep { color: var(--text-label); font-size: 12px; }
+.topbar-title { font-size: 13px; font-weight: 500; }
+
+.topbar-right { display: flex; align-items: center; gap: 8px; }
+
+/* ═══════════════════════════════════════════════════════
+   BUTTONS
+═══════════════════════════════════════════════════════ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid var(--border-md);
+  background: var(--bg-raised);
+  color: var(--text-secondary);
+  transition: all .15s;
+  white-space: nowrap;
+}
+.btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-lg); }
+.btn:disabled { opacity: .45; pointer-events: none; }
+.btn svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 1.8; flex-shrink: 0; }
+
+.btn-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); color: #fff; }
+
+.btn-danger {
+  background: var(--red-soft);
+  border-color: var(--red-border);
+  color: var(--red);
+}
+.btn-danger:hover { background: rgba(240,79,67,.18); }
+
+.btn-sm { padding: 4px 9px; font-size: 11px; }
+.btn-lg { padding: 9px 18px; font-size: 13px; }
+
+/* ═══════════════════════════════════════════════════════
+   CONTENT AREA
+═══════════════════════════════════════════════════════ */
+#content {
+  flex: 1;
+  padding: 24px;
+}
+
+.page { display: none; }
+.page.active { display: block; }
+
+/* ═══════════════════════════════════════════════════════
+   GRID LAYOUTS
+═══════════════════════════════════════════════════════ */
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.g5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+
+/* ═══════════════════════════════════════════════════════
+   CARDS & PANELS
+═══════════════════════════════════════════════════════ */
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.card-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.card-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.card-title-icon {
+  width: 18px; height: 18px;
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--blue-soft);
+}
+.card-title-icon svg { width: 10px; height: 10px; stroke: var(--accent); fill: none; stroke-width: 2; }
+
+.card-meta { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+
+.card-body { padding: 16px; }
+.card-body-sm { padding: 12px; }
+.card-body-lg { padding: 20px; }
+
+/* ═══════════════════════════════════════════════════════
+   KPI CARDS
+═══════════════════════════════════════════════════════ */
+.kpi {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.kpi::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--accent);
+  opacity: .4;
+}
+.kpi.kpi-red::before { background: var(--red); opacity: .6; }
+.kpi.kpi-amber::before { background: var(--amber); opacity: .6; }
+.kpi.kpi-yellow::before { background: var(--yellow); opacity: .5; }
+.kpi.kpi-green::before { background: var(--green); opacity: .5; }
+
+.kpi-label {
+  font-size: 10px;
+  color: var(--text-label);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  margin-bottom: 10px;
+}
+
+.kpi-value {
+  font-size: 26px;
+  font-weight: 500;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.kpi.kpi-red .kpi-value { color: var(--red); }
+.kpi.kpi-amber .kpi-value { color: var(--amber); }
+.kpi.kpi-yellow .kpi-value { color: var(--yellow); }
+.kpi.kpi-green .kpi-value { color: var(--green); }
+
+.kpi-sub { font-size: 11px; color: var(--text-muted); }
+
+/* ═══════════════════════════════════════════════════════
+   RISK BADGES
+═══════════════════════════════════════════════════════ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  letter-spacing: .05em;
+  white-space: nowrap;
+}
+
+.badge-critical { background: var(--red-soft); color: var(--red); border: 1px solid var(--red-border); }
+.badge-high     { background: var(--amber-soft); color: var(--amber); border: 1px solid var(--amber-border); }
+.badge-medium   { background: var(--yellow-soft); color: var(--yellow); border: 1px solid rgba(201,185,58,.22); }
+.badge-low      { background: var(--green-soft); color: var(--green); border: 1px solid var(--green-border); }
+.badge-anomaly  { background: var(--red-soft); color: var(--red); border: 1px solid var(--red-border); }
+.badge-normal   { background: var(--green-soft); color: var(--green); border: 1px solid var(--green-border); }
+.badge-info     { background: var(--blue-soft); color: var(--accent); border: 1px solid var(--blue-border); }
+
+/* ═══════════════════════════════════════════════════════
+   TABLES
+═══════════════════════════════════════════════════════ */
+.table-wrap { overflow-x: auto; }
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.data-table th {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-label);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  padding: 9px 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  background: var(--bg-surface);
+  position: sticky;
+  top: 0;
+}
+
+.data-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  vertical-align: middle;
+}
+
+.data-table tbody tr:hover td { background: var(--bg-raised); cursor: pointer; }
+.data-table tbody tr:last-child td { border-bottom: none; }
+
+.td-id { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+.td-title { color: var(--text-primary); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.td-mono { font-family: var(--font-mono); font-size: 11px; }
+.td-center { text-align: center; }
+
+/* Score bar inline */
+.score-inline {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.score-bar {
+  flex: 1;
+  height: 3px;
+  background: var(--bg-active);
+  border-radius: 2px;
+  min-width: 40px;
+  max-width: 60px;
+}
+.score-bar-fill { height: 100%; border-radius: 2px; }
+.score-bar-fill.c { background: var(--red); }
+.score-bar-fill.h { background: var(--amber); }
+.score-bar-fill.m { background: var(--yellow); }
+.score-bar-fill.l { background: var(--green); }
+
+/* ═══════════════════════════════════════════════════════
+   FORMS
+═══════════════════════════════════════════════════════ */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-group-full { grid-column: 1 / -1; }
+
+.form-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.form-label span { color: var(--red); margin-left: 2px; }
+
+.form-control {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font-ui);
+  outline: none;
+  transition: border-color .15s, background .15s;
+  width: 100%;
+}
+.form-control:focus { border-color: var(--accent); background: var(--bg-hover); }
+.form-control::placeholder { color: var(--text-label); }
+.form-control.error { border-color: var(--red); }
+
+.form-hint { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+.form-error { font-size: 10px; color: var(--red); margin-top: 2px; }
+
+.checkbox-group {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px 0;
+  user-select: none;
+}
+.checkbox-group input[type="checkbox"] {
+  width: 14px; height: 14px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+/* ═══════════════════════════════════════════════════════
+   STATES: LOADING / EMPTY / ERROR / SUCCESS
+═══════════════════════════════════════════════════════ */
+.state-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 12px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.spinner {
+  width: 22px; height: 22px;
+  border: 2px solid var(--border-md);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.state-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+.state-empty-icon {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: var(--bg-raised);
+  display: flex; align-items: center; justify-content: center;
+  margin-bottom: 4px;
+}
+.state-empty-icon svg { width: 16px; height: 16px; stroke: var(--text-muted); fill: none; stroke-width: 1.5; }
+
+.state-error {
+  padding: 12px 14px;
+  background: var(--red-soft);
+  border: 1px solid var(--red-border);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--red);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.state-error-icon { flex-shrink: 0; font-size: 13px; margin-top: 1px; }
+
+.state-success {
+  padding: 12px 14px;
+  background: var(--green-soft);
+  border: 1px solid var(--green-border);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--green);
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* Skeleton */
+.skel {
+  background: linear-gradient(90deg, var(--bg-raised) 25%, var(--bg-hover) 50%, var(--bg-raised) 75%);
+  background-size: 200% 100%;
+  animation: skel 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+@keyframes skel { to { background-position: -200% 0; } }
+.skel-line { height: 12px; margin-bottom: 8px; }
+.skel-w100 { width: 100%; }
+.skel-w80  { width: 80%; }
+.skel-w60  { width: 60%; }
+.skel-w40  { width: 40%; }
+
+/* ═══════════════════════════════════════════════════════
+   FILTER BAR
+═══════════════════════════════════════════════════════ */
+.filter-bar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.filter-control {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  outline: none;
+  transition: border-color .15s;
+}
+.filter-control:focus { border-color: var(--accent); }
+.filter-control::placeholder { color: var(--text-muted); }
+
+.filter-input { width: 200px; }
+
+.filter-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* ═══════════════════════════════════════════════════════
+   PAGINATION
+═══════════════════════════════════════════════════════ */
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.pg-info {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  flex: 1;
+}
+
+.pg-btn {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: transparent;
+  border: 1px solid var(--border-md);
+  color: var(--text-secondary);
+  transition: all .12s;
+}
+.pg-btn:hover { background: var(--bg-raised); color: var(--text-primary); }
+.pg-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ═══════════════════════════════════════════════════════
+   PIPELINE INDICATOR
+═══════════════════════════════════════════════════════ */
+.pipeline {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 20px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.pipeline-step {
+  flex: 1;
+  padding: 11px 14px;
+  border-right: 1px solid var(--border);
+  position: relative;
+}
+.pipeline-step:last-child { border-right: none; }
+
+.pipeline-label {
+  font-size: 9px;
+  color: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  font-family: var(--font-mono);
+  margin-bottom: 3px;
+}
+
+.pipeline-name { font-size: 11px; font-weight: 500; color: var(--text-secondary); }
+
+.pipeline-step.active .pipeline-label { color: var(--accent); }
+.pipeline-step.active .pipeline-name { color: var(--text-primary); }
+.pipeline-step.active { background: var(--blue-soft); }
+
+/* ═══════════════════════════════════════════════════════
+   SECTION HEADERS
+═══════════════════════════════════════════════════════ */
+.section-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.section-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+}
+
+/* ═══════════════════════════════════════════════════════
+   CHART BARS (horizontal)
+═══════════════════════════════════════════════════════ */
+.hbar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+
+.hbar-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  width: 170px;
+  flex-shrink: 0;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hbar-track {
+  flex: 1;
+  height: 16px;
+  background: var(--bg-raised);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.hbar-fill {
+  height: 100%;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: #fff;
+  white-space: nowrap;
+  transition: width .5s ease;
+  min-width: 28px;
+}
+
+.hbar-val {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  width: 38px;
+  text-align: right;
+}
+
+/* ═══════════════════════════════════════════════════════
+   FEATURE CONTRIBUTIONS
+═══════════════════════════════════════════════════════ */
+.feat-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+}
+.feat-row:last-child { border-bottom: none; }
+
+.feat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  width: 190px;
+  flex-shrink: 0;
+}
+
+.feat-bar-wrap {
+  flex: 1;
+  height: 5px;
+  background: var(--bg-raised);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.feat-bar-inner {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  transition: width .4s ease;
+}
+.feat-bar-inner.neg { background: var(--red); }
+
+.feat-z {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  width: 52px;
+  text-align: right;
+}
+
+/* ═══════════════════════════════════════════════════════
+   SCORE DISPLAY (big)
+═══════════════════════════════════════════════════════ */
+.score-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 20px;
+  border-right: 1px solid var(--border);
+}
+
+.score-number {
+  font-size: 64px;
+  font-weight: 300;
+  font-family: var(--font-mono);
+  line-height: 1;
+  letter-spacing: -.02em;
+}
+
+.score-unit {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  margin-top: 4px;
+}
+
+.score-badge-wrap { margin-top: 12px; }
+
+/* Sub scores */
+.sub-score-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border-bottom: 1px solid var(--border);
+}
+
+.sub-score {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border-right: 1px solid var(--border);
+}
+.sub-score:last-child { border-right: none; }
+
+.sub-score-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.sub-score-value {
+  font-size: 30px;
+  font-weight: 300;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.sub-score-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 5px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   RULE CARDS
+═══════════════════════════════════════════════════════ */
+.rule-item {
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  border-left: 3px solid var(--red);
+  padding: 11px 13px;
+  margin-bottom: 7px;
+}
+
+.rule-item.inactive {
+  border-left-color: var(--border-lg);
+  opacity: .45;
+}
+
+.rule-item-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.rule-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.rule-fired {
+  font-size: 9px;
+  color: var(--red);
+  font-family: var(--font-mono);
+  background: var(--red-soft);
+  border: 1px solid var(--red-border);
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: .04em;
+}
+
+.rule-label { font-size: 12px; font-weight: 500; color: var(--text-primary); margin-bottom: 3px; }
+.rule-desc  { font-size: 11px; color: var(--text-secondary); line-height: 1.55; }
+.rule-weight { font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 5px; }
+
+/* ═══════════════════════════════════════════════════════
+   GPT EXPLANATION
+═══════════════════════════════════════════════════════ */
+.gpt-block {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.gpt-block:last-child { border-bottom: none; padding-bottom: 0; }
+.gpt-block:first-child { padding-top: 0; }
+
+.gpt-block-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  font-family: var(--font-mono);
+  margin-bottom: 7px;
+}
+
+.gpt-text { font-size: 12px; color: var(--text-secondary); line-height: 1.7; }
+
+.gpt-flag-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.gpt-flag-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 1px;
+  background: var(--blue-soft);
+  border: 1px solid var(--blue-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+.gpt-action-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.gpt-action-num {
+  width: 18px; height: 18px;
+  background: var(--blue-soft);
+  border: 1px solid var(--blue-border);
+  border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.gpt-disclaimer {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--amber-soft);
+  border: 1px solid var(--amber-border);
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  color: var(--amber);
+  line-height: 1.55;
+  margin-top: 14px;
+}
+.gpt-disclaimer-icon { flex-shrink: 0; font-size: 13px; margin-top: 1px; }
+
+/* ═══════════════════════════════════════════════════════
+   FULL-PAGE RULE CARDS
+═══════════════════════════════════════════════════════ */
+.rule-full {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  margin-bottom: 10px;
+  display: grid;
+  grid-template-columns: 72px 1fr 90px;
+  gap: 16px;
+  align-items: start;
+}
+
+.rule-full-code {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--blue-soft);
+  border: 1px solid var(--blue-border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  text-align: center;
+}
+
+.rule-full-label { font-size: 14px; font-weight: 500; color: var(--text-primary); margin-bottom: 5px; }
+.rule-full-desc  { font-size: 12px; color: var(--text-secondary); line-height: 1.65; }
+.rule-full-id    { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 7px; }
+
+.weight-pill {
+  text-align: center;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+.weight-num { font-size: 20px; font-family: var(--font-mono); color: var(--text-primary); display: block; line-height: 1; }
+.weight-lbl { font-size: 9px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .1em; font-family: var(--font-mono); margin-top: 3px; }
+
+/* ═══════════════════════════════════════════════════════
+   TRAIN PAGE
+═══════════════════════════════════════════════════════ */
+.metric-table { width: 100%; }
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.metric-row:last-child { border-bottom: none; }
+.metric-key { color: var(--text-secondary); }
+.metric-val { font-family: var(--font-mono); color: var(--accent); }
+
+/* ═══════════════════════════════════════════════════════
+   INFO NOTES
+═══════════════════════════════════════════════════════ */
+.info-note {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 8px 12px;
+  background: var(--bg-raised);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--border-lg);
+  line-height: 1.55;
+}
+
+.formula-note {
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 10px 14px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-md);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+}
+.formula-note strong { font-family: var(--font-mono); color: var(--accent); }
+
+/* ═══════════════════════════════════════════════════════
+   DETAIL HEADER
+═══════════════════════════════════════════════════════ */
+.detail-meta-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 10px;
+}
+.detail-meta-item { font-size: 11px; color: var(--text-muted); }
+.detail-meta-item span { color: var(--text-secondary); font-family: var(--font-mono); }
+
+/* ═══════════════════════════════════════════════════════
+   ANALYSIS LAYOUT
+═══════════════════════════════════════════════════════ */
+.analysis-layout {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   MISC
+═══════════════════════════════════════════════════════ */
+.divider {
+  height: 1px;
+  background: var(--border);
+  margin: 14px 0;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  background: var(--bg-active);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+
+.mb4  { margin-bottom: 4px; }
+.mb8  { margin-bottom: 8px; }
+.mb12 { margin-bottom: 12px; }
+.mb16 { margin-bottom: 16px; }
+.mb20 { margin-bottom: 20px; }
+.mb24 { margin-bottom: 24px; }
+
+/* ═══════════════════════════════════════════════════════
+   DASHBOARD SPECIFICS
+═══════════════════════════════════════════════════════ */
+.quick-action-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   TOP ORG TABLE
+═══════════════════════════════════════════════════════ */
+.org-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.org-row:last-child { border-bottom: none; }
+.org-rank {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  width: 18px;
+  flex-shrink: 0;
+  text-align: center;
+}
+.org-name { flex: 1; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.org-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--red);
+  background: var(--red-soft);
+  border: 1px solid var(--red-border);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+
+/* ═══════════════════════════════════════════════════════
+   DEV BANNER
+═══════════════════════════════════════════════════════ */
+.dev-banner {
+  background: rgba(201,185,58,.08);
+  border: 1px solid rgba(201,185,58,.2);
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--yellow);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.dev-banner-icon { flex-shrink: 0; }
+
+/* Column sort indicator */
+.sortable { cursor: pointer; user-select: none; }
+.sortable:hover { color: var(--text-secondary); }
+.sort-indicator { margin-left: 4px; opacity: .5; }
+
+/* ═══════════════════════════════════════════════════════
+   RESULT SCORE CARD
+═══════════════════════════════════════════════════════ */
+.result-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.result-top {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+}
+
+.result-meta {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.result-meta-item {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.result-meta-item strong { font-family: var(--font-mono); color: var(--text-secondary); }
+
+</style>
+</head>
+<body>
+
+<!-- ═══════ SIDEBAR ═══════ -->
+<nav id="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 16 16"><path d="M2 10 L8 2 L14 10"/><path d="M5 13 L11 13"/><circle cx="8" cy="10" r="2" fill="currentColor" stroke="none"/></svg>
+    </div>
+    <div>
+      <div class="brand-name">ProcureAI KZ</div>
+      <div class="brand-sub">Госзакупки · Анализ</div>
+    </div>
+  </div>
+
+  <div class="nav-section">
+    <span class="nav-label">Навигация</span>
+
+    <div class="nav-item active" id="nav-dashboard" onclick="navTo('dashboard')">
+      <svg viewBox="0 0 16 16"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+      Дашборд
+    </div>
+
+    <div class="nav-item" id="nav-analyze" onclick="navTo('analyze')">
+      <svg viewBox="0 0 16 16"><circle cx="7" cy="7" r="5"/><path d="M11 11 L15 15"/><path d="M7 4v6M4 7h6"/></svg>
+      Анализ тендера
+    </div>
+
+    <div class="nav-item" id="nav-tenders" onclick="navTo('tenders')">
+      <svg viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h8"/></svg>
+      Реестр тендеров
+      <span class="nav-badge" id="nav-badge-critical">—</span>
+    </div>
+
+    <span class="nav-label" style="margin-top:8px">Система</span>
+
+    <div class="nav-item" id="nav-rules" onclick="navTo('rules')">
+      <svg viewBox="0 0 16 16"><rect x="2" y="2" width="12" height="12" rx="1"/><path d="M5 6h6M5 9h4"/></svg>
+      Правила детекции
+    </div>
+
+    <div class="nav-item" id="nav-train" onclick="navTo('train')">
+      <svg viewBox="0 0 16 16"><path d="M8 2v4M4 4 8 2 12 4M4 12l4 2 4-2M8 14v-4M3 8 1 6M3 8 1 10M13 8l2-2M13 8l2 2M6 8h4"/></svg>
+      Обучение модели
+    </div>
+  </div>
+
+  <div class="sidebar-footer">
+    <div class="status-row">
+      <span class="status-dot" id="status-dot"></span>
+      <span id="status-text">Инициализация...</span>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══════ MAIN ═══════ -->
+<div id="main">
+  <header id="topbar">
+    <div class="topbar-left">
+      <span class="topbar-breadcrumb" id="breadcrumb">procure-ai</span>
+      <span class="topbar-sep">›</span>
+      <span class="topbar-title" id="page-title">Дашборд</span>
+    </div>
+    <div class="topbar-right">
+      <button class="btn btn-sm" onclick="loadDemoAnalysis()" title="Загрузить демо-тендер">
+        <svg viewBox="0 0 12 12"><path d="M1 6a5 5 0 1010 0 5 5 0 00-10 0"/><path d="M4 6l2-2 2 2M6 4v4"/></svg>
+        Демо
+      </button>
+      <button class="btn btn-sm btn-primary" onclick="navTo('analyze')">
+        <svg viewBox="0 0 12 12"><circle cx="5" cy="5" r="4"/><path d="M8.5 8.5 L11 11"/><path d="M5 3v4M3 5h4"/></svg>
+        Новый анализ
+      </button>
+    </div>
+  </header>
+
+  <div id="content">
+
+    <!-- ═══════ DASHBOARD ═══════ -->
+    <div id="page-dashboard" class="page active">
+
+      <div id="dash-dev-banner" class="dev-banner" style="display:none">
+        <span class="dev-banner-icon">⚠</span>
+        <span>Режим DEMO — данные синтетические. Подключите backend (/api/v1) для работы с реальными тендерами.</span>
+      </div>
+
+      <div class="g5" id="kpi-row">
+        <div class="kpi"><div class="kpi-label">Всего тендеров</div><div class="kpi-value" id="kpi-total"><div class="skel skel-line skel-w60"></div></div><div class="kpi-sub">в датасете</div></div>
+        <div class="kpi kpi-red"><div class="kpi-label">Критический риск</div><div class="kpi-value" id="kpi-critical"><div class="skel skel-line skel-w40"></div></div><div class="kpi-sub">требуют проверки</div></div>
+        <div class="kpi kpi-amber"><div class="kpi-label">Высокий риск</div><div class="kpi-value" id="kpi-high"><div class="skel skel-line skel-w40"></div></div><div class="kpi-sub">под наблюдением</div></div>
+        <div class="kpi kpi-yellow"><div class="kpi-label">Доля аномалий ML</div><div class="kpi-value" id="kpi-anomaly"><div class="skel skel-line skel-w40"></div></div><div class="kpi-sub">Isolation Forest</div></div>
+        <div class="kpi"><div class="kpi-label">Объём (тг)</div><div class="kpi-value" id="kpi-value"><div class="skel skel-line skel-w80"></div></div><div class="kpi-sub">начальная цена</div></div>
+      </div>
+
+      <div class="g2">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Распределение рисков</span>
+          </div>
+          <div class="card-body" id="dash-risk-dist">
+            <div class="state-loading"><div class="spinner"></div><span>Загрузка...</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Топ категорий (критический + высокий)</span>
+          </div>
+          <div class="card-body" id="dash-top-cats">
+            <div class="state-loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="g2 mb24">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Топ организаций по числу флагов</span>
+          </div>
+          <div class="card-body-sm" id="dash-top-orgs">
+            <div class="state-loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Сводка по регионам</span>
+          </div>
+          <div class="card-body" id="dash-regions">
+            <div class="state-loading"><div class="spinner"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card mb24">
+        <div class="card-header">
+          <span class="card-title">Тендеры с наивысшим риском</span>
+          <span class="card-meta">топ 10 · сортировка по риск-скору</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID тендера</th>
+                <th>Предмет</th>
+                <th>Заказчик</th>
+                <th>Регион</th>
+                <th>Цена, тг</th>
+                <th>Заявок</th>
+                <th>Риск-скор</th>
+                <th>Уровень</th>
+                <th>Флаги</th>
+                <th>ML</th>
+              </tr>
+            </thead>
+            <tbody id="dash-tbody">
+              <tr><td colspan="10"><div class="state-loading"><div class="spinner"></div><span>Загрузка...</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /dashboard -->
+
+    <!-- ═══════ ANALYZE ═══════ -->
+    <div id="page-analyze" class="page">
+
+      <div class="pipeline mb20">
+        <div class="pipeline-step" id="pipe-1">
+          <div class="pipeline-label">01 — Ввод данных</div>
+          <div class="pipeline-name">Параметры тендера</div>
+        </div>
+        <div class="pipeline-step" id="pipe-2">
+          <div class="pipeline-label">02 — Rule Engine</div>
+          <div class="pipeline-name">Правила A1–A6</div>
+        </div>
+        <div class="pipeline-step" id="pipe-3">
+          <div class="pipeline-label">03 — ML Model</div>
+          <div class="pipeline-name">Isolation Forest</div>
+        </div>
+        <div class="pipeline-step" id="pipe-4">
+          <div class="pipeline-label">04 — Risk Score</div>
+          <div class="pipeline-name">0.55×Rule + 0.45×ML</div>
+        </div>
+        <div class="pipeline-step" id="pipe-5">
+          <div class="pipeline-label">05 — GPT-4o</div>
+          <div class="pipeline-name">Аудиторский нарратив</div>
+        </div>
+      </div>
+
+      <div class="card mb16">
+        <div class="card-header">
+          <span class="card-title">Параметры тендера</span>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-sm" onclick="fillDemoForm()">Заполнить демо</button>
+            <button class="btn btn-sm" onclick="clearAnalyzeForm()">Очистить</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="form-grid mb16">
+            <div class="form-group form-group-full">
+              <label class="form-label">Предмет тендера <span>*</span></label>
+              <input id="f-title" class="form-control" type="text" placeholder="Строительные работы: ремонт объектов образования (Астана)">
+              <span class="form-error" id="err-title" style="display:none">Укажите предмет тендера</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Организация-заказчик <span>*</span></label>
+              <input id="f-org" class="form-control" type="text" placeholder="Управление образования г. Астана">
+              <span class="form-error" id="err-org" style="display:none">Укажите заказчика</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Победитель (ТОО / АО)</label>
+              <input id="f-winner" class="form-control" type="text" placeholder="ТОО «МегаСтрой KZ»">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Начальная цена (тенге) <span>*</span></label>
+              <input id="f-price" class="form-control" type="number" placeholder="485000000" min="1">
+              <span class="form-error" id="err-price" style="display:none">Укажите начальную цену</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Количество заявок <span>*</span></label>
+              <input id="f-bids" class="form-control" type="number" placeholder="1" min="1">
+              <span class="form-error" id="err-bids" style="display:none">Укажите кол-во заявок</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Срок подачи (рабочих дней) <span>*</span></label>
+              <input id="f-days" class="form-control" type="number" placeholder="3" min="1">
+              <span class="form-error" id="err-days" style="display:none">Укажите срок подачи</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Наценка к рыночной цене (%)</label>
+              <input id="f-markup" class="form-control" type="number" placeholder="62.0" step="0.1">
+              <span class="form-hint">Положительное = завышение; &gt;30% = флаг A2</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Количество лотов</label>
+              <input id="f-lots" class="form-control" type="number" placeholder="12" min="1">
+              <span class="form-hint">&ge;8 лотов = флаг A5 (дробление)</span>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Срок контракта (дней)</label>
+              <input id="f-contract" class="form-control" type="number" placeholder="180" min="1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">Регион</label>
+              <select id="f-region" class="form-control">
+                <option>Астана</option><option>Алматы</option><option>Шымкент</option>
+                <option>Актобе</option><option>Тараз</option><option>Павлодар</option>
+                <option>Усть-Каменогорск</option><option>Семей</option><option>Атырау</option><option>Кызылорда</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:16px">
+            <label class="checkbox-group">
+              <input type="checkbox" id="f-repeat">
+              Повторяющийся победитель <span class="tag" style="margin-left:4px">A4</span>
+            </label>
+            <label class="checkbox-group">
+              <input type="checkbox" id="f-spec">
+              ТЗ заточено под поставщика <span class="tag" style="margin-left:4px">A6</span>
+            </label>
+            <label class="checkbox-group">
+              <input type="checkbox" id="f-gpt" checked>
+              Включить GPT-4o нарратив
+            </label>
+          </div>
+
+          <div style="display:flex;gap:8px;align-items:center">
+            <button class="btn btn-primary" onclick="runAnalysis()" id="btn-analyze">
+              <svg viewBox="0 0 12 12"><circle cx="5" cy="5" r="4"/><path d="M8.5 8.5 11 11"/></svg>
+              Запустить анализ
+            </button>
+          </div>
+
+          <div id="analyze-error" style="display:none;margin-top:12px" class="state-error">
+            <span class="state-error-icon">⚠</span>
+            <span id="analyze-error-text"></span>
+          </div>
+        </div>
+      </div>
+
+      <div id="analyze-loading" style="display:none" class="state-loading">
+        <div class="spinner"></div>
+        <span>Анализ тендера — применяем правила и ML-модель...</span>
+      </div>
+
+      <div id="analyze-result" style="display:none"></div>
+
+    </div><!-- /analyze -->
+
+    <!-- ═══════ TENDERS ═══════ -->
+    <div id="page-tenders" class="page">
+
+      <div id="tenders-dev-banner" class="dev-banner" style="display:none">
+        <span class="dev-banner-icon">⚠</span>
+        <span>Режим DEMO — синтетические данные. Backend недоступен.</span>
+      </div>
+
+      <div class="filter-bar">
+        <input class="filter-control filter-input" id="t-search" placeholder="Поиск по ID, предмету, заказчику..." oninput="filterTenders()">
+        <select class="filter-control" id="t-risk" onchange="filterTenders()">
+          <option value="">Все уровни риска</option>
+          <option value="КРИТИЧЕСКИЙ">Критический</option>
+          <option value="ВЫСОКИЙ">Высокий</option>
+          <option value="СРЕДНИЙ">Средний</option>
+          <option value="НИЗКИЙ">Низкий</option>
+        </select>
+        <select class="filter-control" id="t-region" onchange="filterTenders()">
+          <option value="">Все регионы</option>
+        </select>
+        <select class="filter-control" id="t-category" onchange="filterTenders()">
+          <option value="">Все категории</option>
+        </select>
+        <select class="filter-control" id="t-ml" onchange="filterTenders()">
+          <option value="">ML: все</option>
+          <option value="1">ML: аномалия</option>
+          <option value="0">ML: норма</option>
+        </select>
+        <span class="filter-count" id="t-count"></span>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th class="sortable" onclick="sortTenders('tender_id')">ID <span class="sort-indicator" id="sort-tender_id"></span></th>
+                <th>Предмет</th>
+                <th>Заказчик</th>
+                <th class="sortable" onclick="sortTenders('region')">Регион</th>
+                <th class="sortable" onclick="sortTenders('category')">Категория</th>
+                <th class="sortable" onclick="sortTenders('initial_price_kzt')">Цена, тг</th>
+                <th class="sortable td-center" onclick="sortTenders('bid_count')">Заявок</th>
+                <th class="sortable" onclick="sortTenders('risk_score')">Риск-скор ↓</th>
+                <th>Уровень</th>
+                <th class="td-center">Флаги</th>
+                <th>ML</th>
+              </tr>
+            </thead>
+            <tbody id="tenders-tbody">
+              <tr><td colspan="11"><div class="state-loading"><div class="spinner"></div><span>Загрузка...</span></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" id="t-pagination"></div>
+      </div>
+    </div><!-- /tenders -->
+
+    <!-- ═══════ RULES ═══════ -->
+    <div id="page-rules" class="page">
+
+      <div class="formula-note mb20">
+        Итоговый риск-скор вычисляется как <strong>Risk = 0.55 × Rule Score + 0.45 × ML Score</strong>.
+        Rule Score: сумма весов сработавших правил / 120 × 100 × 1.6 (ограничена 100).
+        ML Score: инвертированная функция решения Isolation Forest, нормированная в [0, 100].
+      </div>
+
+      <div id="rules-list">
+        <div class="state-loading"><div class="spinner"></div><span>Загрузка правил...</span></div>
+      </div>
+
+      <div class="card mt20" style="margin-top:20px">
+        <div class="card-header">
+          <span class="card-title">Весовое распределение правил</span>
+          <span class="card-meta" id="rules-total-weight"></span>
+        </div>
+        <div class="card-body" id="rules-weights-chart">
+          <div class="state-loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+    </div><!-- /rules -->
+
+    <!-- ═══════ TRAIN ═══════ -->
+    <div id="page-train" class="page">
+
+      <div style="display:grid;grid-template-columns:420px 1fr;gap:16px;align-items:start">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Переобучение ML-модели</span>
+            <span class="tag">Административная функция</span>
+          </div>
+          <div class="card-body">
+            <div class="info-note mb16">
+              Переобучение генерирует новый датасет (600 записей, seed=99) и заново обучает Isolation Forest.
+              Существующая модель будет заменена. Обычное время: 2–5 секунд.
+            </div>
+            <div class="card mb12" style="border-radius:var(--radius-md)">
+              <div class="card-body-sm">
+                <div class="metric-table">
+                  <div class="metric-row"><span class="metric-key">Алгоритм</span><span class="metric-val">IsolationForest</span></div>
+                  <div class="metric-row"><span class="metric-key">n_estimators</span><span class="metric-val">200</span></div>
+                  <div class="metric-row"><span class="metric-key">contamination</span><span class="metric-val">0.15</span></div>
+                  <div class="metric-row"><span class="metric-key">random_state</span><span class="metric-val">42</span></div>
+                  <div class="metric-row"><span class="metric-key">Признаков</span><span class="metric-val">9</span></div>
+                  <div class="metric-row"><span class="metric-key">Нормализация</span><span class="metric-val">StandardScaler</span></div>
+                </div>
+              </div>
+            </div>
+
+            <button class="btn btn-primary" onclick="runRetrain()" id="btn-train">
+              <svg viewBox="0 0 12 12"><path d="M6 1v3M3 2.5 6 1 9 2.5M3 9.5 6 11 9 9.5M6 11v-3M1.5 5 3 4M1.5 7 3 8M10.5 5 9 4M10.5 7 9 8"/></svg>
+              Запустить переобучение
+            </button>
+
+            <div id="train-loading" style="display:none;margin-top:12px" class="state-loading">
+              <div class="spinner"></div>
+              <span>Обучение модели...</span>
+            </div>
+
+            <div id="train-result" style="display:none;margin-top:12px"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Описание признаков</span>
+          </div>
+          <div class="card-body">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Признак</th>
+                  <th>Правило</th>
+                  <th>Описание</th>
+                  <th>Порог</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td class="td-mono">bid_count</td><td><span class="badge badge-info">—</span></td><td>Число поданных заявок</td><td class="td-mono">—</td></tr>
+                <tr><td class="td-mono">single_bid</td><td><span class="badge badge-critical">A1</span></td><td>Единственная заявка (бинарный)</td><td class="td-mono">== 1</td></tr>
+                <tr><td class="td-mono">price_markup_pct</td><td><span class="badge badge-critical">A2</span></td><td>Наценка к рыночной цене (%)</td><td class="td-mono">&gt; 30%</td></tr>
+                <tr><td class="td-mono">submission_days</td><td><span class="badge badge-critical">A3</span></td><td>Срок приёма заявок (дни)</td><td class="td-mono">&lt; 5</td></tr>
+                <tr><td class="td-mono">repeat_winner</td><td><span class="badge badge-critical">A4</span></td><td>Повторяющийся победитель (бинарный)</td><td class="td-mono">== 1</td></tr>
+                <tr><td class="td-mono">lot_count</td><td><span class="badge badge-critical">A5</span></td><td>Количество лотов</td><td class="td-mono">&ge; 8</td></tr>
+                <tr><td class="td-mono">spec_tailored</td><td><span class="badge badge-critical">A6</span></td><td>ТЗ под поставщика (бинарный)</td><td class="td-mono">== 1</td></tr>
+                <tr><td class="td-mono">contract_duration_days</td><td><span class="badge badge-info">—</span></td><td>Срок контракта (дни)</td><td class="td-mono">—</td></tr>
+                <tr><td class="td-mono">initial_price_kzt</td><td><span class="badge badge-info">—</span></td><td>Начальная цена (тенге)</td><td class="td-mono">—</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /train -->
+
+  </div><!-- /#content -->
+</div><!-- /#main -->
+
+<!-- ═══════════════════════════════════════════════════════
+     APPLICATION LOGIC
+═══════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+/* ─── CONFIG ─── */
+const CONFIG = {
+  API_BASE: (() => {
+    const meta = document.querySelector('meta[name="api-base"]');
+    if (meta) return meta.content;
+    // Dev: try localhost; in production, set API_BASE via server-side template
+    return 'http://localhost:8000/api/v1';
+  })(),
+  MOCK_MODE: false, // set to true only in dev if backend is unavailable
+  PAGE_SIZE: 20,
+};
+
+/* ─── STATE ─── */
+const STATE = {
+  tenders: [],
+  filteredTenders: [],
+  currentPage: 1,
+  sortKey: 'risk_score',
+  sortDir: 'desc',
+  backendOnline: false,
+};
+
+/* ─── UTILS ─── */
+const $ = id => document.getElementById(id);
+const esc = str => String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function fmtMoney(v) {
+  v = Number(v) || 0;
+  if (v >= 1e9) return (v/1e9).toFixed(2) + ' млрд';
+  if (v >= 1e6) return (v/1e6).toFixed(1) + ' млн';
+  if (v >= 1e3) return (v/1e3).toFixed(0) + ' тыс';
+  return v.toFixed(0);
+}
+
+function fmtNum(v) { return (Number(v)||0).toLocaleString('ru'); }
+
+function riskBadge(lvl) {
+  const map = {
+    'КРИТИЧЕСКИЙ': 'badge-critical',
+    'ВЫСОКИЙ':     'badge-high',
+    'СРЕДНИЙ':     'badge-medium',
+    'НИЗКИЙ':      'badge-low',
+  };
+  return `<span class="badge ${map[lvl] || 'badge-info'}">${esc(lvl)}</span>`;
+}
+
+function scoreColor(s) {
+  if (s >= 70) return 'var(--red)';
+  if (s >= 45) return 'var(--amber)';
+  if (s >= 20) return 'var(--yellow)';
+  return 'var(--green)';
+}
+
+function scoreClass(lvl) {
+  if (lvl === 'КРИТИЧЕСКИЙ') return 'c';
+  if (lvl === 'ВЫСОКИЙ')     return 'h';
+  if (lvl === 'СРЕДНИЙ')     return 'm';
+  return 'l';
+}
+
+/* ─── API LAYER ─── */
+async function apiFetch(path, opts = {}) {
+  try {
+    const url = CONFIG.API_BASE + path;
+    const res = await fetch(url, {
+      ...opts,
+      headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    return await res.json();
+  } catch (e) {
+    if (e.name === 'TypeError' || e.message.includes('fetch')) {
+      // Network failure — backend offline
+      return null;
+    }
+    throw e;
+  }
+}
+
+/* ─── MOCK DATA ─── */
+const MOCK = (() => {
+  const CATS = ['Строительные работы','IT-услуги и ПО','Медицинское оборудование',
+    'Продукты питания','Офисные товары','Транспортные услуги',
+    'Консультационные услуги','Охранные услуги','Дорожный ремонт','Фармацевтика'];
+  const ORGS = ['Министерство здравоохранения РК','Министерство образования РК',
+    'Акимат г. Алматы','Акимат г. Астаны','МВД РК','КазМунайГаз',
+    'Самрук-Казына','КазАвтоЖол','Акимат Карагандинской области','Управление здравоохранения ВКО'];
+  const REGIONS = ['Астана','Алматы','Шымкент','Актобе','Тараз',
+    'Павлодар','Усть-Каменогорск','Семей','Атырау','Кызылорда'];
+  const WINNERS = ['ТОО «АлтынСтрой»','ТОО «КазТехСервис»','ТОО «НурСнаб»',
+    'ТОО «БерекеПром»','ТОО «МегаСтрой KZ»','ТОО «АкжолКонсалт»','ТОО «ДиджиталКЗ»'];
+  const VERBS  = ['поставка','оказание услуг','выполнение работ'];
+  const LEVELS = ['КРИТИЧЕСКИЙ','ВЫСОКИЙ','СРЕДНИЙ','НИЗКИЙ'];
+  const W = [.15,.27,.36,.22];
+
+  function rng(seed) {
+    let s = seed;
+    return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
+  }
+
+  function genTenders(n = 250, seed = 42) {
+    const r = rng(seed);
+    const pick = arr => arr[Math.floor(r() * arr.length)];
+    const tenders = [];
+    for (let i = 0; i < n; i++) {
+      const rnd = r();
+      let lvlIdx = 3, cum = 0;
+      for (let j = 0; j < W.length; j++) { cum += W[j]; if (rnd < cum) { lvlIdx = j; break; } }
+      const score = lvlIdx === 0 ? 70+r()*30 : lvlIdx === 1 ? 45+r()*25 : lvlIdx === 2 ? 20+r()*25 : r()*20;
+      const flags = lvlIdx === 0 ? 3+Math.floor(r()*4) : lvlIdx === 1 ? 2+Math.floor(r()*3) : Math.floor(r()*3);
+      const bids  = r() < .25 ? 1 : 2+Math.floor(r()*10);
+      const cat   = pick(CATS), reg = pick(REGIONS), org = pick(ORGS);
+      tenders.push({
+        tender_id:            `KZ-2024-${String(i+1).padStart(5,'0')}`,
+        title:                `${cat}: ${pick(VERBS)} (${reg})`,
+        customer_org:         org,
+        region:               reg,
+        category:             cat,
+        initial_price_kzt:    Math.floor(500_000 + r() * 800_000_000),
+        bid_count:            bids,
+        risk_score:           Math.round(score * 10) / 10,
+        risk_level:           LEVELS[lvlIdx],
+        flags_count:          flags,
+        ml_anomaly:           lvlIdx <= 1,
+        submission_days:      r() < .2 ? Math.floor(1+r()*4) : Math.floor(10+r()*35),
+        repeat_winner:        r() < .15 ? 1 : 0,
+        lot_count:            r() < .12 ? Math.floor(8+r()*18) : Math.floor(1+r()*4),
+        spec_tailored:        r() < .14 ? 1 : 0,
+        price_markup_pct:     r() < .18 ? Math.round((35+r()*145)*10)/10 : Math.round((-10+r()*30)*10)/10,
+        winner_name:          pick(WINNERS),
+        contract_duration_days: Math.floor(30+r()*700),
+      });
+    }
+    return tenders.sort((a,b) => b.risk_score - a.risk_score);
+  }
+
+  function genStats(tenders) {
+    const levels = {};
+    tenders.forEach(t => { levels[t.risk_level] = (levels[t.risk_level]||0)+1; });
+    const flagged = tenders.filter(t => t.risk_level === 'КРИТИЧЕСКИЙ' || t.risk_level === 'ВЫСОКИЙ');
+    const catCounts = {};
+    flagged.forEach(t => { catCounts[t.category] = (catCounts[t.category]||0)+1; });
+    const topCat = Object.entries(catCounts).sort((a,b)=>b[1]-a[1])[0];
+    const orgCounts = {};
+    flagged.forEach(t => { orgCounts[t.customer_org] = (orgCounts[t.customer_org]||0)+1; });
+    const topOrg = Object.entries(orgCounts).sort((a,b)=>b[1]-a[1])[0];
+    return {
+      total_tenders: tenders.length,
+      critical_count: levels['КРИТИЧЕСКИЙ']||0,
+      high_count:     levels['ВЫСОКИЙ']||0,
+      medium_count:   levels['СРЕДНИЙ']||0,
+      low_count:      levels['НИЗКИЙ']||0,
+      total_value_kzt: tenders.reduce((s,t)=>s+t.initial_price_kzt,0),
+      anomaly_rate_pct: Math.round(tenders.filter(t=>t.ml_anomaly).length/tenders.length*1000)/10,
+      top_flagged_category: topCat ? topCat[0] : '—',
+      top_flagged_org: topOrg ? topOrg[0] : '—',
+      _orgCounts: orgCounts,
+      _catCounts: catCounts,
+      _regionCounts: (() => {
+        const rc = {};
+        flagged.forEach(t => { rc[t.region] = (rc[t.region]||0)+1; });
+        return rc;
+      })(),
+    };
+  }
+
+  const _tenders = genTenders();
+  const _stats   = genStats(_tenders);
+  return { tenders: _tenders, stats: _stats };
+})();
+
+function mockAnalysis(tender) {
+  const RULE_DEFS = [
+    {id:'R1',code:'A1',label:'Единственная заявка',description:'Подана только одна заявка — возможная аффилированность или ограничение конкуренции',weight:20,check:t=>t.bid_count==1},
+    {id:'R2',code:'A2',label:'Завышение начальной цены',description:'Начальная цена превышает рыночный ориентир более чем на 30%',weight:25,check:t=>(t.price_markup_pct||0)>30},
+    {id:'R3',code:'A3',label:'Сжатые сроки подачи',description:'Срок приёма заявок менее 5 рабочих дней — ограничивает доступ участников',weight:18,check:t=>t.submission_days<5},
+    {id:'R4',code:'A4',label:'Повторяющийся победитель',description:'Один и тот же поставщик побеждает у данного заказчика без конкурса',weight:22,check:t=>!!t.repeat_winner},
+    {id:'R5',code:'A5',label:'Дробление лота',description:'Необычно большое число лотов — признак разбивки крупного контракта для обхода порогов',weight:15,check:t=>(t.lot_count||1)>=8},
+    {id:'R6',code:'A6',label:'ТЗ под конкретного поставщика',description:'Технические требования содержат признаки заточенности под одного исполнителя',weight:20,check:t=>!!t.spec_tailored},
+  ];
+  const triggered = RULE_DEFS.filter(r=>r.check(tender)).map(r=>({rule_id:r.id,code:r.code,label:r.label,description:r.description,weight:r.weight}));
+  const wSum = triggered.reduce((s,r)=>s+r.weight,0);
+  const ruleScore = Math.min(100,(wSum/120)*100*1.6);
+  const mlScore   = triggered.length>=3 ? 55+Math.random()*30 : Math.random()*40;
+  const riskScore = Math.round((0.55*ruleScore+0.45*mlScore)*10)/10;
+  const lvl = riskScore>=70?'КРИТИЧЕСКИЙ':riskScore>=45?'ВЫСОКИЙ':riskScore>=20?'СРЕДНИЙ':'НИЗКИЙ';
+  const features = [
+    {feature:'bid_count',label:'Количество заявок',z_score:tender.bid_count===1?2.8:-0.3,direction:tender.bid_count===1?'высокий':'норма'},
+    {feature:'price_markup_pct',label:'Завышение цены',z_score:Math.round(((tender.price_markup_pct||0)-15)/20*100)/100,direction:(tender.price_markup_pct||0)>30?'высокий':'норма'},
+    {feature:'submission_days',label:'Срок подачи',z_score:tender.submission_days<5?-2.5:0.4,direction:tender.submission_days<5?'низкий':'норма'},
+    {feature:'repeat_winner',label:'Повторный победитель',z_score:tender.repeat_winner?1.9:-0.2,direction:tender.repeat_winner?'высокий':'норма'},
+    {feature:'lot_count',label:'Количество лотов',z_score:Math.round(((tender.lot_count||1)-3)/2*100)/100,direction:(tender.lot_count||1)>=8?'высокий':'норма'},
+    {feature:'spec_tailored',label:'ТЗ под поставщика',z_score:tender.spec_tailored?2.1:-0.1,direction:tender.spec_tailored?'высокий':'норма'},
+    {feature:'initial_price_kzt',label:'Начальная цена',z_score:Math.round(Math.log10(tender.initial_price_kzt||1)/Math.log10(1e8)*100)/100,direction:'норма'},
+    {feature:'contract_duration_days',label:'Срок контракта',z_score:Math.round((tender.contract_duration_days||180)/365*100)/100,direction:'норма'},
+  ].sort((a,b)=>Math.abs(b.z_score)-Math.abs(a.z_score));
+
+  const gpt = triggered.length > 0 ? {
+    verdict_summary: `Тендер демонстрирует ${triggered.length} из 6 признаков нарушения конкурентных процедур. Риск-скор ${riskScore}/100 (${lvl}).`,
+    risk_rationale: `Rule Engine зафиксировал совпадение ${triggered.length} правил (суммарный вес ${wSum}/120). ML-модель ${mlScore>50?'подтвердила аномальность профиля':'не выявила статистических отклонений'} тендера.`,
+    flag_analysis: triggered.map(r=>({code:r.code,explanation:r.description})),
+    recommended_actions: [
+      'Запросить у заказчика обоснование начальной цены контракта',
+      'Проверить аффилированность победителя с должностными лицами заказчика',
+      'Изучить историю тендеров данного заказчика за последние 12 месяцев',
+      'Провести мониторинг исполнения контракта',
+    ],
+    data_gaps: 'Данные о реальных рыночных ценах, реестр аффилированных лиц (БИН), история предыдущих тендеров заказчика',
+    disclaimer: 'Данный анализ — инструмент поддержки принятия решений. Окончательное заключение принимается уполномоченным аудитором.',
+  } : null;
+
+  return {
+    tender_id: tender.tender_id||'—',
+    title: tender.title||'—',
+    customer_org: tender.customer_org||'—',
+    risk_score: riskScore,
+    risk_level: lvl,
+    rule_score: Math.round(ruleScore*10)/10,
+    ml_score:   Math.round(mlScore*10)/10,
+    ml_anomaly: mlScore > 50,
+    triggered_rules: triggered,
+    feature_contributions: features,
+    flags_count: triggered.length,
+    gpt_explanation: gpt,
+  };
+}
+
+/* ─── NAVIGATION ─── */
+const PAGE_META = {
+  dashboard: ['Дашборд',       'dashboard'],
+  analyze:   ['Анализ тендера','analyze'],
+  tenders:   ['Реестр тендеров','tenders'],
+  rules:     ['Правила детекции','rules'],
+  train:     ['Обучение модели','train'],
+};
+
+function navTo(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  $('page-' + page).classList.add('active');
+  const nav = $('nav-' + page);
+  if (nav) nav.classList.add('active');
+  const [title, crumb] = PAGE_META[page];
+  $('page-title').textContent = title;
+  $('breadcrumb').textContent = 'procure-ai / ' + crumb;
+
+  if (page === 'tenders' && STATE.tenders.length === 0) loadTenders();
+  if (page === 'rules') loadRules();
+}
+
+/* ─── DASHBOARD ─── */
+async function loadDashboard() {
+  let stats = await apiFetch('/stats');
+  const isMock = stats === null;
+  if (isMock) {
+    stats = MOCK.stats;
+    $('dash-dev-banner').style.display = 'flex';
+    CONFIG.MOCK_MODE = true;
+  }
+
+  // KPIs
+  $('kpi-total').textContent   = fmtNum(stats.total_tenders);
+  $('kpi-critical').textContent = fmtNum(stats.critical_count);
+  $('kpi-high').textContent    = fmtNum(stats.high_count);
+  $('kpi-anomaly').textContent  = stats.anomaly_rate_pct + '%';
+  $('kpi-value').textContent   = fmtMoney(stats.total_value_kzt);
+
+  // Badge
+  const nb = $('nav-badge-critical');
+  if (nb) nb.textContent = stats.critical_count;
+
+  // Risk distribution
+  const total = stats.critical_count + stats.high_count + stats.medium_count + stats.low_count;
+  const dist = [
+    { label:'Критический', count:stats.critical_count, color:'var(--red)' },
+    { label:'Высокий',     count:stats.high_count,     color:'var(--amber)' },
+    { label:'Средний',     count:stats.medium_count,   color:'var(--yellow)' },
+    { label:'Низкий',      count:stats.low_count,      color:'var(--green)' },
+  ];
+  $('dash-risk-dist').innerHTML = dist.map(d => {
+    const pct = total > 0 ? Math.round(d.count/total*100) : 0;
+    return `<div class="hbar-row">
+      <div class="hbar-label">${esc(d.label)}</div>
+      <div class="hbar-track">
+        <div class="hbar-fill" style="width:${pct}%;background:${d.color}">${d.count}</div>
+      </div>
+      <div class="hbar-val">${pct}%</div>
+    </div>`;
+  }).join('') + `<div class="info-note" style="margin-top:10px">Распределение ${fmtNum(total)} тендеров по уровню риска</div>`;
+
+  // Top categories
+  const catData = isMock && stats._catCounts
+    ? Object.entries(stats._catCounts).sort((a,b)=>b[1]-a[1]).slice(0,6)
+    : [['Строительные работы',42],['IT-услуги и ПО',31],['Дорожный ремонт',28],['Медицинское оборудование',22],['Фармацевтика',17],['Транспортные услуги',14]];
+  const maxCat = catData[0]?.[1] || 1;
+  $('dash-top-cats').innerHTML = catData.map(([cat, cnt]) =>
+    `<div class="hbar-row">
+      <div class="hbar-label">${esc(cat)}</div>
+      <div class="hbar-track"><div class="hbar-fill" style="width:${Math.round(cnt/maxCat*100)}%;background:var(--accent)">${cnt}</div></div>
+      <div class="hbar-val">${cnt}</div>
+    </div>`
+  ).join('');
+
+  // Top orgs
+  const orgData = isMock && stats._orgCounts
+    ? Object.entries(stats._orgCounts).sort((a,b)=>b[1]-a[1]).slice(0,6)
+    : Object.entries({
+      'Акимат г. Алматы':12,'Министерство здравоохранения РК':9,'КазАвтоЖол':8,
+      'Акимат Карагандинской области':7,'МВД РК':6,'Самрук-Казына':5
+    });
+  $('dash-top-orgs').innerHTML = orgData.map(([org, cnt], i) =>
+    `<div class="org-row">
+      <span class="org-rank">${i+1}</span>
+      <span class="org-name" title="${esc(org)}">${esc(org)}</span>
+      <span class="org-count">${cnt}</span>
+    </div>`
+  ).join('');
+
+  // Regions
+  const regData = isMock && stats._regionCounts
+    ? Object.entries(stats._regionCounts).sort((a,b)=>b[1]-a[1]).slice(0,6)
+    : [['Алматы',18],['Астана',15],['Шымкент',11],['Актобе',8],['Павлодар',6],['Кызылорда',5]];
+  const maxReg = regData[0]?.[1] || 1;
+  $('dash-regions').innerHTML = regData.map(([reg, cnt]) =>
+    `<div class="hbar-row">
+      <div class="hbar-label">${esc(reg)}</div>
+      <div class="hbar-track"><div class="hbar-fill" style="width:${Math.round(cnt/maxReg*100)}%;background:var(--blue)">${cnt}</div></div>
+      <div class="hbar-val">${cnt}</div>
+    </div>`
+  ).join('');
+
+  // Top 10 table
+  let topData;
+  if (!isMock) {
+    const res = await apiFetch('/tenders?page_size=10&risk_level=КРИТИЧЕСКИЙ');
+    topData = res?.items || MOCK.tenders.slice(0,10);
+  } else {
+    topData = MOCK.tenders.slice(0,10);
+  }
+  renderDashTable(topData);
+}
+
+function renderDashTable(items) {
+  if (!items || items.length === 0) {
+    $('dash-tbody').innerHTML = `<tr><td colspan="10"><div class="state-empty">
+      <div class="state-empty-icon"><svg viewBox="0 0 16 16"><path d="M2 4h12v9H2z"/><path d="M5 4V2h6v2"/></svg></div>
+      <span>Нет данных</span>
+    </div></td></tr>`;
+    return;
+  }
+  $('dash-tbody').innerHTML = items.map(t => `
+    <tr onclick="openTenderDetail('${esc(t.tender_id)}')">
+      <td class="td-id">${esc(t.tender_id)}</td>
+      <td class="td-title" title="${esc(t.title)}">${esc(t.title)}</td>
+      <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.customer_org)}">${esc(t.customer_org)}</td>
+      <td>${esc(t.region)}</td>
+      <td class="td-mono">${fmtMoney(t.initial_price_kzt)}</td>
+      <td class="td-mono td-center">${t.bid_count}</td>
+      <td>
+        <div class="score-inline">
+          <span style="font-family:var(--font-mono);font-weight:500;color:${scoreColor(t.risk_score)};font-size:12px">${t.risk_score}</span>
+          <div class="score-bar"><div class="score-bar-fill ${scoreClass(t.risk_level)}" style="width:${t.risk_score}%"></div></div>
+        </div>
+      </td>
+      <td>${riskBadge(t.risk_level)}</td>
+      <td class="td-mono td-center">${t.flags_count}</td>
+      <td><span class="badge ${t.ml_anomaly?'badge-anomaly':'badge-normal'}">${t.ml_anomaly?'АНОМ':'НОРМ'}</span></td>
+    </tr>`).join('');
+}
+
+/* ─── TENDERS PAGE ─── */
+async function loadTenders() {
+  let data = await apiFetch('/tenders?page_size=250');
+  if (data === null) {
+    $('tenders-dev-banner').style.display = 'flex';
+    STATE.tenders = MOCK.tenders;
+  } else {
+    STATE.tenders = data.items || [];
+  }
+
+  // Populate filters
+  const regions  = [...new Set(STATE.tenders.map(t=>t.region))].sort();
+  const cats     = [...new Set(STATE.tenders.map(t=>t.category))].sort();
+  const rSel = $('t-region'), cSel = $('t-category');
+  regions.forEach(r => { const o=document.createElement('option'); o.value=o.textContent=r; rSel.appendChild(o); });
+  cats.forEach(c   => { const o=document.createElement('option'); o.value=o.textContent=c; cSel.appendChild(o); });
+
+  STATE.filteredTenders = [...STATE.tenders];
+  renderTendersPage();
+}
+
+function filterTenders() {
+  const search  = ($('t-search').value||'').toLowerCase().trim();
+  const risk    = $('t-risk').value;
+  const region  = $('t-region').value;
+  const cat     = $('t-category').value;
+  const ml      = $('t-ml').value;
+
+  STATE.filteredTenders = STATE.tenders.filter(t => {
+    if (search && ![t.tender_id, t.title, t.customer_org].some(s => (s||'').toLowerCase().includes(search))) return false;
+    if (risk   && t.risk_level !== risk)  return false;
+    if (region && t.region !== region)    return false;
+    if (cat    && t.category !== cat)     return false;
+    if (ml === '1' && !t.ml_anomaly)      return false;
+    if (ml === '0' && t.ml_anomaly)       return false;
+    return true;
+  });
+  STATE.currentPage = 1;
+  renderTendersPage();
+}
+
+let _sortIndicators = {};
+function sortTenders(key) {
+  if (STATE.sortKey === key) {
+    STATE.sortDir = STATE.sortDir === 'desc' ? 'asc' : 'desc';
+  } else {
+    STATE.sortKey = key;
+    STATE.sortDir = 'desc';
+  }
+  // Update indicators
+  Object.keys(_sortIndicators).forEach(k => {
+    const el = $(`sort-${k}`);
+    if (el) el.textContent = '';
+  });
+  const el = $(`sort-${key}`);
+  if (el) el.textContent = STATE.sortDir === 'desc' ? '↓' : '↑';
+
+  const dir = STATE.sortDir === 'desc' ? -1 : 1;
+  STATE.filteredTenders.sort((a,b) => {
+    const av = a[key], bv = b[key];
+    if (typeof av === 'number') return dir * (av - bv);
+    return dir * String(av||'').localeCompare(String(bv||''), 'ru');
+  });
+  renderTendersPage();
+}
+
+function renderTendersPage() {
+  const total = STATE.filteredTenders.length;
+  $('t-count').textContent = `${fmtNum(total)} тендеров`;
+
+  const start = (STATE.currentPage - 1) * CONFIG.PAGE_SIZE;
+  const items = STATE.filteredTenders.slice(start, start + CONFIG.PAGE_SIZE);
+
+  if (items.length === 0) {
+    $('tenders-tbody').innerHTML = `<tr><td colspan="11"><div class="state-empty">
+      <div class="state-empty-icon"><svg viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M5 8h6M8 5v6"/></svg></div>
+      <span>По заданным фильтрам ничего не найдено</span>
+    </div></td></tr>`;
+  } else {
+    $('tenders-tbody').innerHTML = items.map(t => `
+      <tr onclick="openTenderDetail('${esc(t.tender_id)}')">
+        <td class="td-id">${esc(t.tender_id)}</td>
+        <td class="td-title" title="${esc(t.title)}">${esc(t.title)}</td>
+        <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(t.customer_org)}">${esc(t.customer_org)}</td>
+        <td>${esc(t.region)}</td>
+        <td>${esc(t.category)}</td>
+        <td class="td-mono">${fmtMoney(t.initial_price_kzt)}</td>
+        <td class="td-mono td-center">${t.bid_count}</td>
+        <td>
+          <div class="score-inline">
+            <span style="font-family:var(--font-mono);font-weight:500;color:${scoreColor(t.risk_score)};font-size:12px">${t.risk_score}</span>
+            <div class="score-bar"><div class="score-bar-fill ${scoreClass(t.risk_level)}" style="width:${t.risk_score}%"></div></div>
+          </div>
+        </td>
+        <td>${riskBadge(t.risk_level)}</td>
+        <td class="td-mono td-center">${t.flags_count}</td>
+        <td><span class="badge ${t.ml_anomaly?'badge-anomaly':'badge-normal'}">${t.ml_anomaly?'АНОМ':'НОРМ'}</span></td>
+      </tr>`).join('');
+  }
+
+  // Pagination
+  const totalPages = Math.ceil(total / CONFIG.PAGE_SIZE);
+  const cp = STATE.currentPage;
+  let paginationHTML = `<span class="pg-info">${start+1}–${Math.min(start+CONFIG.PAGE_SIZE, total)} из ${fmtNum(total)}</span>`;
+
+  if (totalPages > 1) {
+    const pages = [];
+    pages.push(1);
+    if (cp > 3) pages.push('...');
+    for (let p = Math.max(2,cp-1); p <= Math.min(totalPages-1,cp+1); p++) pages.push(p);
+    if (cp < totalPages-2) pages.push('...');
+    if (totalPages > 1) pages.push(totalPages);
+
+    pages.forEach(p => {
+      if (p === '...') {
+        paginationHTML += `<span style="color:var(--text-muted);font-size:11px;padding:0 4px">…</span>`;
+      } else {
+        paginationHTML += `<button class="pg-btn ${p===cp?'active':''}" onclick="goPage(${p})">${p}</button>`;
+      }
+    });
+  }
+  $('t-pagination').innerHTML = paginationHTML;
+}
+
+function goPage(p) {
+  STATE.currentPage = p;
+  renderTendersPage();
+  // Scroll top of table
+  $('page-tenders').scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+/* ─── TENDER DETAIL (open in analyze) ─── */
+function openTenderDetail(id) {
+  const t = STATE.tenders.find(x => x.tender_id === id) || MOCK.tenders.find(x => x.tender_id === id);
+  if (!t) return;
+  navTo('analyze');
+
+  $('f-title').value    = t.title || '';
+  $('f-org').value      = t.customer_org || '';
+  $('f-price').value    = t.initial_price_kzt || '';
+  $('f-bids').value     = t.bid_count || '';
+  $('f-days').value     = t.submission_days || '';
+  $('f-markup').value   = t.price_markup_pct ?? '';
+  $('f-lots').value     = t.lot_count || 1;
+  $('f-winner').value   = t.winner_name || '';
+  $('f-contract').value = t.contract_duration_days || 180;
+  $('f-repeat').checked = !!t.repeat_winner;
+  $('f-spec').checked   = !!t.spec_tailored;
+
+  runAnalysis();
+}
+
+/* ─── ANALYZE FORM ─── */
+function fillDemoForm() {
+  $('f-title').value    = 'Строительные работы: капитальный ремонт объектов образования';
+  $('f-org').value      = 'Управление образования г. Астана';
+  $('f-price').value    = '485000000';
+  $('f-bids').value     = '1';
+  $('f-days').value     = '3';
+  $('f-markup').value   = '62.0';
+  $('f-lots').value     = '12';
+  $('f-winner').value   = 'ТОО «МегаСтрой KZ»';
+  $('f-contract').value = '180';
+  $('f-repeat').checked = true;
+  $('f-spec').checked   = true;
+}
+
+function clearAnalyzeForm() {
+  ['f-title','f-org','f-price','f-bids','f-days','f-markup','f-lots','f-winner','f-contract'].forEach(id => $(id).value = '');
+  $('f-repeat').checked = false;
+  $('f-spec').checked   = false;
+  $('f-gpt').checked    = true;
+  $('analyze-result').style.display  = 'none';
+  $('analyze-error').style.display   = 'none';
+  ['pipe-2','pipe-3','pipe-4','pipe-5'].forEach(id => $(''+id)?.classList.remove('active'));
+}
+
+function validateForm() {
+  let valid = true;
+  const checks = [
+    ['f-title',   'err-title',  v => v.trim().length > 0],
+    ['f-org',     'err-org',    v => v.trim().length > 0],
+    ['f-price',   'err-price',  v => Number(v) > 0],
+    ['f-bids',    'err-bids',   v => Number.isInteger(Number(v)) && Number(v) >= 1],
+    ['f-days',    'err-days',   v => Number.isInteger(Number(v)) && Number(v) >= 1],
+  ];
+  checks.forEach(([fid, eid, fn]) => {
+    const el = $(fid), err = $(eid);
+    if (!fn(el.value)) {
+      el.classList.add('error');
+      err.style.display = 'block';
+      valid = false;
+    } else {
+      el.classList.remove('error');
+      err.style.display = 'none';
+    }
+  });
+  return valid;
+}
+
+async function runAnalysis() {
+  if (!validateForm()) return;
+
+  $('analyze-error').style.display  = 'none';
+  $('analyze-result').style.display = 'none';
+  $('analyze-loading').style.display = 'flex';
+  $('btn-analyze').disabled = true;
+
+  // Animate pipeline
+  ['pipe-2','pipe-3','pipe-4','pipe-5'].forEach((id,i) => {
+    setTimeout(() => $(''+id)?.classList.add('active'), i * 400);
+  });
+
+  const tender = {
+    tender_id: 'MANUAL-' + Date.now(),
+    title:        $('f-title').value.trim(),
+    customer_org: $('f-org').value.trim(),
+    initial_price_kzt: parseFloat($('f-price').value),
+    bid_count:         parseInt($('f-bids').value),
+    single_bid:        parseInt($('f-bids').value) === 1 ? 1 : 0,
+    submission_days:   parseInt($('f-days').value),
+    price_markup_pct:  parseFloat($('f-markup').value) || 0,
+    lot_count:         parseInt($('f-lots').value) || 1,
+    repeat_winner:     $('f-repeat').checked ? 1 : 0,
+    spec_tailored:     $('f-spec').checked ? 1 : 0,
+    winner_name:       $('f-winner').value.trim() || 'Неизвестно',
+    contract_duration_days: parseInt($('f-contract').value) || 180,
+    region:            $('f-region').value,
+    with_gpt_explanation: $('f-gpt').checked,
+  };
+
+  let result = null;
+  try {
+    result = await apiFetch('/analyze', { method:'POST', body: JSON.stringify(tender) });
+  } catch (e) {
+    $('analyze-loading').style.display = 'none';
+    $('btn-analyze').disabled = false;
+    $('analyze-error-text').textContent = `Ошибка сервера: ${e.message}`;
+    $('analyze-error').style.display = 'flex';
+    return;
+  }
+
+  if (result === null) result = mockAnalysis(tender);
+
+  $('analyze-loading').style.display = 'none';
+  $('btn-analyze').disabled = false;
+  $('analyze-result').innerHTML = renderAnalysisResult(result, tender);
+  $('analyze-result').style.display = 'block';
+}
+
+function renderAnalysisResult(r, tender) {
+  const col = scoreColor(r.risk_score);
+  const cls = scoreClass(r.risk_level);
+
+  const ALL_RULES_META = {
+    A1:{label:'Единственная заявка',desc:'Подана только одна заявка — аффилированность или ограничение конкуренции',weight:20},
+    A2:{label:'Завышение начальной цены',desc:'Начальная цена превышает рыночный ориентир более чем на 30%',weight:25},
+    A3:{label:'Сжатые сроки подачи',desc:'Срок приёма заявок менее 5 рабочих дней',weight:18},
+    A4:{label:'Повторяющийся победитель',desc:'Один поставщик побеждает без конкурса',weight:22},
+    A5:{label:'Дробление лота',desc:'Большое число лотов — разбивка контракта для обхода порогов',weight:15},
+    A6:{label:'ТЗ под поставщика',desc:'ТЗ содержит признаки заточенности под одного исполнителя',weight:20},
+  };
+
+  const triggered = r.triggered_rules || [];
+  const triggeredCodes = triggered.map(x => x.code);
+
+  // Header card
+  let html = `<div class="result-card">
+    <div class="result-top">
+      <div class="score-hero">
+        <div class="score-number" style="color:${col}">${r.risk_score}</div>
+        <div class="score-unit">риск-скор / 100</div>
+        <div class="score-badge-wrap">${riskBadge(r.risk_level)}</div>
+      </div>
+      <div>
+        <div class="sub-score-grid">
+          <div class="sub-score">
+            <div class="sub-score-label">Rule Score</div>
+            <div class="sub-score-value" style="color:${scoreColor(r.rule_score)}">${r.rule_score}</div>
+            <div class="sub-score-desc">0.55 × вес правил</div>
+          </div>
+          <div class="sub-score">
+            <div class="sub-score-label">ML Score</div>
+            <div class="sub-score-value" style="color:${scoreColor(r.ml_score)}">${r.ml_score}</div>
+            <div class="sub-score-desc">0.45 × Isolation Forest</div>
+          </div>
+        </div>
+        <div style="padding:12px 16px;border-top:1px solid var(--border)">
+          <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+            <span style="font-size:11px;color:var(--text-muted)">ML-классификация:</span>
+            <span class="badge ${r.ml_anomaly?'badge-anomaly':'badge-normal'}">${r.ml_anomaly?'АНОМАЛИЯ':'НОРМА'}</span>
+            <span style="font-size:11px;color:var(--text-muted)">Флагов: <strong style="font-family:var(--font-mono);color:var(--text-primary)">${r.flags_count}</strong></span>
+            <span style="font-size:11px;color:var(--text-muted)">Заказчик: <strong style="color:var(--text-secondary)">${esc(tender.customer_org)}</strong></span>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted)">
+            Формула: <span style="font-family:var(--font-mono);color:var(--text-secondary)">Risk = 0.55 × ${r.rule_score} + 0.45 × ${r.ml_score} = ${r.risk_score}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  // Rules + Features
+  html += `<div class="analysis-layout mb16">
+    <div>
+      <div class="section-hdr"><span class="section-label">Правила (${triggered.length}/6 сработало)</span></div>`;
+
+  ['A1','A2','A3','A4','A5','A6'].forEach(code => {
+    const active = triggeredCodes.includes(code);
+    const m = ALL_RULES_META[code];
+    html += `<div class="rule-item ${active?'':'inactive'}">
+      <div class="rule-item-head">
+        <span class="rule-code">${code}</span>
+        ${active ? '<span class="rule-fired">СРАБОТАЛО</span>' : ''}
+      </div>
+      <div class="rule-label">${esc(m.label)}</div>
+      <div class="rule-desc">${esc(m.desc)}</div>
+      <div class="rule-weight">Вес: ${m.weight} / 120</div>
+    </div>`;
+  });
+
+  html += `</div><div>
+    <div class="section-hdr"><span class="section-label">Вклад признаков (z-score)</span></div>
+    <div class="card">
+      <div class="card-body">`;
+
+  const feats = r.feature_contributions || [];
+  const maxZ = Math.max(...feats.map(f => Math.abs(f.z_score)), 1);
+  feats.forEach(f => {
+    const pct = Math.min(100, Math.abs(f.z_score)/maxZ*100);
+    const neg  = f.z_score < 0;
+    const zAbs = Math.abs(f.z_score);
+    const zCol = zAbs > 1.5 ? 'var(--red)' : zAbs > 0.8 ? 'var(--amber)' : 'var(--text-muted)';
+    html += `<div class="feat-row">
+      <div class="feat-label">${esc(f.label)}</div>
+      <div class="feat-bar-wrap"><div class="feat-bar-inner ${neg?'neg':''}" style="width:${pct}%"></div></div>
+      <div class="feat-z" style="color:${zCol}">${f.z_score > 0?'+':''}${f.z_score}</div>
+    </div>`;
+  });
+
+  html += `</div>
+      <div class="card-body" style="padding-top:0">
+        <div class="info-note">z-score = отклонение от нормального распределения. |z| > 1 — значимое отклонение.</div>
+      </div>
+    </div>
+  </div></div>`;
+
+  // GPT explanation
+  const gpt = r.gpt_explanation;
+  if (gpt) {
+    html += `<div class="card mb16">
+      <div class="card-header">
+        <span class="card-title">
+          <span class="card-title-icon"><svg viewBox="0 0 10 10"><path d="M2 5h6M5 2v6"/></svg></span>
+          GPT-4o · Аудиторское заключение
+        </span>
+        <span class="tag">temperature=0.2</span>
+      </div>
+      <div class="card-body">`;
+
+    if (gpt.verdict_summary) {
+      html += `<div class="gpt-block">
+        <div class="gpt-block-label">Вердикт</div>
+        <div class="gpt-text">${esc(gpt.verdict_summary)}</div>
+      </div>`;
+    }
+
+    if (gpt.risk_rationale) {
+      html += `<div class="gpt-block">
+        <div class="gpt-block-label">Обоснование риска</div>
+        <div class="gpt-text">${esc(gpt.risk_rationale)}</div>
+      </div>`;
+    }
+
+    if (gpt.flag_analysis && gpt.flag_analysis.length > 0) {
+      html += `<div class="gpt-block">
+        <div class="gpt-block-label">Анализ флагов</div>`;
+      gpt.flag_analysis.forEach(f => {
+        html += `<div class="gpt-flag-row">
+          <span class="gpt-flag-code">${esc(f.code)}</span>
+          <span>${esc(f.explanation)}</span>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    if (gpt.recommended_actions && gpt.recommended_actions.length > 0) {
+      html += `<div class="gpt-block">
+        <div class="gpt-block-label">Рекомендованные действия</div>`;
+      gpt.recommended_actions.forEach((a, i) => {
+        html += `<div class="gpt-action-row">
+          <div class="gpt-action-num">${i+1}</div>
+          <div>${esc(a)}</div>
+        </div>`;
+      });
+      html += `</div>`;
+    }
+
+    if (gpt.data_gaps) {
+      html += `<div class="gpt-block">
+        <div class="gpt-block-label">Недостающие данные</div>
+        <div class="gpt-text" style="color:var(--amber)">${esc(gpt.data_gaps)}</div>
+      </div>`;
+    }
+
+    if (gpt.disclaimer) {
+      html += `<div class="gpt-disclaimer">
+        <span class="gpt-disclaimer-icon">⚠</span>
+        <span>${esc(gpt.disclaimer)}</span>
+      </div>`;
+    }
+
+    html += `</div></div>`;
+  } else {
+    html += `<div class="gpt-disclaimer">
+      <span class="gpt-disclaimer-icon">⚠</span>
+      <span>GPT-объяснение недоступно или отключено. Используйте числовые показатели для оценки. Окончательное заключение принимается уполномоченным аудитором.</span>
+    </div>`;
+  }
+
+  return html;
+}
+
+async function loadDemoAnalysis() {
+  navTo('analyze');
+  const demoData = await apiFetch('/demo');
+  if (demoData) {
+    $('f-title').value    = demoData.title;
+    $('f-org').value      = demoData.customer_org;
+    $('f-price').value    = demoData.initial_price_kzt;
+    $('f-bids').value     = demoData.bid_count;
+    $('f-days').value     = demoData.submission_days;
+    $('f-markup').value   = demoData.price_markup_pct;
+    $('f-lots').value     = demoData.lot_count;
+    $('f-winner').value   = demoData.winner_name;
+    $('f-contract').value = demoData.contract_duration_days;
+    $('f-repeat').checked = !!demoData.repeat_winner;
+    $('f-spec').checked   = !!demoData.spec_tailored;
+  } else {
+    fillDemoForm();
+  }
+  runAnalysis();
+}
+
+/* ─── RULES PAGE ─── */
+async function loadRules() {
+  $('rules-list').innerHTML = `<div class="state-loading"><div class="spinner"></div><span>Загрузка правил...</span></div>`;
+
+  let data = await apiFetch('/rules');
+  const rules = data?.rules || [
+    {id:'R1',code:'A1',label:'Единственная заявка',description:'Подана только одна заявка — возможная аффилированность или ограничение конкуренции',weight:20},
+    {id:'R2',code:'A2',label:'Завышение начальной цены',description:'Начальная цена превышает рыночный ориентир более чем на 30%',weight:25},
+    {id:'R3',code:'A3',label:'Сжатые сроки подачи',description:'Срок приёма заявок менее 5 рабочих дней — ограничивает доступ участников',weight:18},
+    {id:'R4',code:'A4',label:'Повторяющийся победитель',description:'Один и тот же поставщик побеждает у данного заказчика без конкурса',weight:22},
+    {id:'R5',code:'A5',label:'Дробление лота',description:'Необычно большое число лотов — признак разбивки крупного контракта для обхода порогов',weight:15},
+    {id:'R6',code:'A6',label:'ТЗ под конкретного поставщика',description:'Технические требования содержат признаки заточенности под одного исполнителя',weight:20},
+  ];
+
+  const total = rules.reduce((s,r) => s + r.weight, 0);
+  $('rules-total-weight').textContent = `Сумма весов: ${total}`;
+
+  $('rules-list').innerHTML = rules.map(r => `
+    <div class="rule-full">
+      <div class="rule-full-code">${esc(r.code)}</div>
+      <div>
+        <div class="rule-full-label">${esc(r.label)}</div>
+        <div class="rule-full-desc">${esc(r.description)}</div>
+        <div class="rule-full-id">ID: <span style="color:var(--text-secondary)">${esc(r.id)}</span></div>
+      </div>
+      <div class="weight-pill">
+        <span class="weight-num">${r.weight}</span>
+        <span class="weight-lbl">вес</span>
+      </div>
+    </div>`).join('');
+
+  $('rules-weights-chart').innerHTML = rules.map(r => {
+    const pct = Math.round(r.weight/total*100);
+    return `<div class="hbar-row">
+      <div class="hbar-label">${esc(r.code)}: ${esc(r.label)}</div>
+      <div class="hbar-track"><div class="hbar-fill" style="width:${pct*3.2}%;background:var(--accent)">${r.weight}</div></div>
+      <div class="hbar-val">${pct}%</div>
+    </div>`;
+  }).join('') + `<div class="info-note" style="margin-top:10px">
+    Нормировка: Rule Score = min(100, (Σ весов сработавших правил / ${total}) × 100 × 1.6)
+  </div>`;
+}
+
+/* ─── TRAIN PAGE ─── */
+async function runRetrain() {
+  const btn = $('btn-train');
+  btn.disabled = true;
+  $('train-loading').style.display = 'flex';
+  $('train-result').style.display  = 'none';
+
+  let result = null;
+  try {
+    result = await apiFetch('/train', { method: 'POST' });
+  } catch(e) {
+    result = null;
+  }
+
+  $('train-loading').style.display = 'none';
+  btn.disabled = false;
+
+  const isMock = result === null;
+  const metrics = result?.metrics || {
+    train_samples: 600,
+    anomaly_rate_pct: 16.3,
+    model: 'IsolationForest',
+    features: ['bid_count','single_bid','price_markup_pct','submission_days','repeat_winner','lot_count','spec_tailored','contract_duration_days','initial_price_kzt'],
+  };
+
+  $('train-result').innerHTML = `
+    <div class="state-success mb12">
+      ✓ Модель успешно обучена${isMock?' (симуляция — backend недоступен)':''}
+    </div>
+    <div class="card" style="border-radius:var(--radius-md)">
+      <div class="card-body-sm">
+        <div class="metric-table">
+          <div class="metric-row"><span class="metric-key">Образцов обучения</span><span class="metric-val">${metrics.train_samples}</span></div>
+          <div class="metric-row"><span class="metric-key">Доля аномалий</span><span class="metric-val">${metrics.anomaly_rate_pct}%</span></div>
+          <div class="metric-row"><span class="metric-key">Алгоритм</span><span class="metric-val">${metrics.model}</span></div>
+          <div class="metric-row"><span class="metric-key">Признаков</span><span class="metric-val">${Array.isArray(metrics.features)?metrics.features.length:9}</span></div>
+        </div>
+      </div>
+    </div>`;
+  $('train-result').style.display = 'block';
+}
+
+/* ─── STATUS CHECK ─── */
+async function checkBackendStatus() {
+  try {
+    const res = await fetch(CONFIG.API_BASE.replace('/api/v1','/health'), { signal: AbortSignal.timeout(3000) });
+    STATE.backendOnline = res.ok;
+  } catch {
+    STATE.backendOnline = false;
+  }
+
+  const dot  = $('status-dot');
+  const text = $('status-text');
+  if (STATE.backendOnline) {
+    dot.style.background = 'var(--green)';
+    dot.style.boxShadow  = '0 0 6px var(--green)';
+    text.textContent = 'Backend online · IF v2';
+  } else {
+    dot.style.background = 'var(--amber)';
+    dot.style.boxShadow  = '0 0 6px var(--amber)';
+    text.textContent = 'Demo mode · офлайн';
+  }
+}
+
+/* ─── INIT ─── */
+(async () => {
+  await checkBackendStatus();
+  await loadDashboard();
+})();
+</script>
+</body>
+</html>
