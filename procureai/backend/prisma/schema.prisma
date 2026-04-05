@@ -1,0 +1,135 @@
+// prisma/schema.prisma
+// ProcureAI KZ — Database Schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── User ────────────────────────────────────────────────────────────────────
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(AUDITOR)
+  organization String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  lots               Lot[]
+  savedCalculations  SavedCalculation[]
+  analysisResults    AnalysisResult[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  AUDITOR
+  VIEWER
+}
+
+// ─── Lot ─────────────────────────────────────────────────────────────────────
+model Lot {
+  id                   String   @id @default(uuid())
+  lotNumber            String   @unique   // e.g. KZ-2024-00042
+  title                String
+  category             String
+  customerOrg          String
+  region               String
+  publishedDate        DateTime?
+  winnerName           String?
+  initialPriceKzt      Float
+  bidCount             Int      @default(1)
+  submissionDays       Int
+  repeatWinner         Boolean  @default(false)
+  lotCount             Int      @default(1)
+  specTailored         Boolean  @default(false)
+  contractDurationDays Int      @default(180)
+  priceMarkupPct       Float    @default(0)
+  status               LotStatus @default(NEW)
+  auditorComment       String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  createdById  String?
+  createdBy    User?   @relation(fields: [createdById], references: [id])
+
+  analysisResult AnalysisResult?
+
+  @@index([status])
+  @@index([category])
+  @@index([region])
+  @@map("lots")
+}
+
+enum LotStatus {
+  NEW
+  IN_REVIEW
+  ARCHIVED
+}
+
+// ─── AnalysisResult ──────────────────────────────────────────────────────────
+model AnalysisResult {
+  id         String   @id @default(uuid())
+  lotId      String   @unique
+  lot        Lot      @relation(fields: [lotId], references: [id], onDelete: Cascade)
+
+  riskScore      Float
+  riskLevel      RiskLevel
+  ruleScore      Float
+  mlScore        Float
+  mlAnomaly      Boolean
+  flagsCount     Int
+
+  triggeredRules Json    // [{ruleId, code, label, description, weight}]
+  featureContribs Json   // [{feature, label, zScore, direction}]
+  gptExplanation  Json?  // {verdictSummary, riskRationale, flagAnalysis, recommendedActions, dataGaps, disclaimer}
+  networkFlags    Json?  // [string]
+  priceFlag       Json?  // {marketMedianKzt, deviationPct, priceAnomaly, severity, explanation}
+
+  analyzedById String?
+  analyzedBy   User?   @relation(fields: [analyzedById], references: [id])
+  analyzedAt   DateTime @default(now())
+
+  @@map("analysis_results")
+}
+
+enum RiskLevel {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+// ─── SavedCalculation ────────────────────────────────────────────────────────
+model SavedCalculation {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  priceSmeta    Float
+  pricePurchase Float
+  quantity      Int
+  taxRegime     TaxRegime
+  grossProfit   Float
+  taxAmount     Float
+  netProfit     Float
+  marginPct     Float
+
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("saved_calculations")
+}
+
+enum TaxRegime {
+  SIMPLIFIED   // 3%
+  VAT          // 12%
+}

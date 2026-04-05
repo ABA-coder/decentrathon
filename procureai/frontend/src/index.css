@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=Onest:wght@300;400;500;600;700&display=swap');
+
+/* ── Base ─────────────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html { font-size: 14px; }
+
+body {
+  font-family: 'Onest', sans-serif;
+  background-color: #080b0f;
+  color: #dde3ec;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* ── Scrollbar ─────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar            { width: 5px; height: 5px; }
+::-webkit-scrollbar-track      { background: transparent; }
+::-webkit-scrollbar-thumb      { background: #1c2430; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover{ background: rgba(255,255,255,.18); }
+
+/* ── Spinner ──────────────────────────────────────────────────────────────── */
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,.1);
+  border-top-color: #4d8ef5;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  flex-shrink: 0;
+}
+
+/* ── Skeleton ─────────────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skel {
+  background: linear-gradient(90deg, #131920 25%, #1c2430 50%, #131920 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite;
+  border-radius: 4px;
+  height: 14px;
+}
+
+/* ── Score bar ────────────────────────────────────────────────────────────── */
+.score-bar-fill-c { background: #f04f43; }
+.score-bar-fill-h { background: #e09a2e; }
+.score-bar-fill-m { background: #c9b93a; }
+.score-bar-fill-l { background: #27a862; }
+
+/* ── Pipeline active step ─────────────────────────────────────────────────── */
+@keyframes pipeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.pipe-step-active { animation: pipeIn .3s ease forwards; }
+
+/* ── Toast ────────────────────────────────────────────────────────────────── */
+@keyframes toastIn  { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes toastOut { from { opacity:1; } to { opacity:0; } }
+.toast-enter { animation: toastIn  .25s ease forwards; }
+.toast-exit  { animation: toastOut .25s ease forwards; }
