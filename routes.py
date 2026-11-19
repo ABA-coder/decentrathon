@@ -11,14 +11,17 @@ Endpoints:
   GET  /demo             — демо-тендер для UI
 """
 
-from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, Field
+import os
+import secrets
+from functools import lru_cache
+from fastapi import APIRouter, HTTPException, Query, Header
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, List, Dict, Any
 import pandas as pd
 
-from models.detector import get_detector
-from core.explainer import generate_explanation, _fmt_money
-from data.dataset import generate_tenders
+from detector import get_detector, _detector_lock
+from explainer import generate_explanation
+from dataset import generate_tenders
 
 router = APIRouter()
 
@@ -33,13 +36,20 @@ def _get_dataset() -> pd.DataFrame:
     return _dataset_cache
 
 
+@lru_cache(maxsize=1)
+def _ranked_dataset() -> pd.DataFrame:
+    with _detector_lock:
+        return get_detector().analyze_batch(_get_dataset())
+
+
 # ── Pydantic Models ───────────────────────────────────────────────────────────
 
 class TenderInput(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False, str_strip_whitespace=True)
     tender_id: str = Field(default="MANUAL-001")
-    title: str = Field(..., description="Предмет тендера")
+    title: str = Field(..., min_length=1, max_length=2000, description="Предмет тендера")
     category: str = Field(default="Прочее")
-    customer_org: str = Field(..., description="Организация-заказчик")
+    customer_org: str = Field(..., min_length=1, max_length=500, description="Организация-заказчик")
     region: str = Field(default="Астана")
     initial_price_kzt: float = Field(..., gt=0, description="Начальная цена (тенге)")
     bid_count: int = Field(..., ge=1, description="Количество поданных заявок")
@@ -121,12 +131,16 @@ class StatsResponse(BaseModel):
     anomaly_rate_pct: float
     top_flagged_category: str
     top_flagged_org: str
+    category_counts: Dict[str, int] = Field(default_factory=dict)
+    org_counts: Dict[str, int] = Field(default_factory=dict)
+    region_counts: Dict[str, int] = Field(default_factory=dict)
+    data_source: str = "synthetic"
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/analyze", response_model=AnalysisResponse)
-async def analyze_tender(body: TenderInput):
+def analyze_tender(body: TenderInput):
     """
     Полный анализ тендера: правила + ML + GPT объяснение.
     
@@ -134,7 +148,7 @@ async def analyze_tender(body: TenderInput):
     вклады признаков и (опционально) аудиторский нарратив от GPT-4o.
     """
     detector = get_detector()
-    tender_dict = body.dict(exclude={"with_gpt_explanation"})
+    tender_dict = body.model_dump(exclude={"with_gpt_explanation"})
     tender_dict["single_bid"] = int(body.bid_count == 1)
 
     analysis = detector.analyze(tender_dict)
@@ -156,9 +170,9 @@ async def analyze_tender(body: TenderInput):
 
 
 @router.get("/tenders", response_model=TenderListResponse)
-async def list_tenders(
+def list_tenders(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=5, le=100),
+    page_size: int = Query(20, ge=1, le=250),
     risk_level: Optional[str] = Query(None, description="КРИТИЧЕСКИЙ|ВЫСОКИЙ|СРЕДНИЙ|НИЗКИЙ"),
     region: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
@@ -167,17 +181,15 @@ async def list_tenders(
     """
     Список всех тендеров с риск-скорами. Поддерживает фильтрацию и пагинацию.
     """
-    detector = get_detector()
-    df = _get_dataset()
-    ranked = detector.analyze_batch(df)
+    ranked = _ranked_dataset()
 
     # Filters
     if risk_level:
         ranked = ranked[ranked["risk_level"] == risk_level.upper()]
     if region:
-        ranked = ranked[ranked["region"].str.contains(region, case=False, na=False)]
+        ranked = ranked[ranked["region"].str.contains(region, case=False, na=False, regex=False)]
     if category:
-        ranked = ranked[ranked["category"].str.contains(category, case=False, na=False)]
+        ranked = ranked[ranked["category"].str.contains(category, case=False, na=False, regex=False)]
     ranked = ranked[ranked["risk_score"] >= min_score]
 
     total = len(ranked)
@@ -205,7 +217,7 @@ async def list_tenders(
 
 
 @router.get("/tenders/{tender_id}")
-async def get_tender(tender_id: str, with_gpt: bool = Query(False)):
+def get_tender(tender_id: str, with_gpt: bool = Query(False)):
     """Детальный анализ конкретного тендера по ID."""
     df = _get_dataset()
     row = df[df["tender_id"] == tender_id]
@@ -232,16 +244,15 @@ async def get_tender(tender_id: str, with_gpt: bool = Query(False)):
 
 
 @router.get("/stats", response_model=StatsResponse)
-async def get_stats():
+def get_stats():
     """Агрегированная статистика по всему датасету тендеров."""
-    detector = get_detector()
-    df = _get_dataset()
-    ranked = detector.analyze_batch(df)
+    ranked = _ranked_dataset()
 
     levels = ranked["risk_level"].value_counts().to_dict()
     anomaly_rate = ranked["ml_anomaly"].mean() * 100
     top_cat = ranked[ranked["risk_level"].isin(["КРИТИЧЕСКИЙ", "ВЫСОКИЙ"])]["category"].mode()
     top_org = ranked[ranked["risk_level"].isin(["КРИТИЧЕСКИЙ", "ВЫСОКИЙ"])]["customer_org"].mode()
+    flagged = ranked[ranked["risk_level"].isin(["КРИТИЧЕСКИЙ", "ВЫСОКИЙ"])]
 
     return StatsResponse(
         total_tenders=len(ranked),
@@ -253,22 +264,33 @@ async def get_stats():
         anomaly_rate_pct=round(float(anomaly_rate), 1),
         top_flagged_category=str(top_cat.iloc[0]) if len(top_cat) else "—",
         top_flagged_org=str(top_org.iloc[0]) if len(top_org) else "—",
+        category_counts={str(k): int(v) for k, v in flagged["category"].value_counts().items()},
+        org_counts={str(k): int(v) for k, v in flagged["customer_org"].value_counts().items()},
+        region_counts={str(k): int(v) for k, v in flagged["region"].value_counts().items()},
     )
 
 
 @router.post("/train")
-async def retrain():
+def retrain(x_admin_key: Optional[str] = Header(default=None)):
     """Переобучение ML-модели на свежем датасете."""
-    detector = get_detector()
-    df = generate_tenders(n=600, seed=99)
-    metrics = detector.train(df)
+    expected = os.getenv("ADMIN_API_KEY")
+    if not expected:
+        raise HTTPException(status_code=503, detail="Переобучение отключено: настройте ADMIN_API_KEY на сервере")
+    if not x_admin_key or not secrets.compare_digest(x_admin_key, expected):
+        raise HTTPException(status_code=403, detail="Для переобучения нужен ключ администратора")
+    import detector as detector_module
+    with _detector_lock:
+        replacement = detector_module.ProcurementAnomalyDetector()
+        metrics = replacement.train(generate_tenders(n=600, seed=99))
+        detector_module._detector = replacement
+        _ranked_dataset.cache_clear()
     return {"status": "trained", "metrics": metrics}
 
 
 @router.get("/rules")
 async def list_rules():
     """Список всех активных правил детекции аномалий."""
-    from models.detector import RULES
+    from detector import RULES
     return {
         "rules": [
             {

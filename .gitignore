@@ -201,6 +201,12 @@ cython_debug/
 .cursorignore
 .cursorindexingignore
 
+# Runtime model and environment secrets
+*.pkl
+.env
+.env.*
+!.env.example
+
 # Marimo
 marimo/_static/
 marimo/_lsp/

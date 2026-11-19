@@ -16,13 +16,16 @@ import numpy as np
 import pandas as pd
 import pickle
 import os
+import tempfile
+from threading import RLock
 from typing import Dict, List, Any, Tuple
 from sklearn.ensemble import IsolationForest
 from sklearn.preprocessing import StandardScaler
 
-from data.dataset import generate_tenders, FEATURE_COLUMNS, FLAG_LABELS
+from dataset import generate_tenders, FEATURE_COLUMNS, FLAG_LABELS
 
-MODEL_PATH = os.path.join(os.path.dirname(__file__), "procure_model.pkl")
+MODEL_PATH = os.getenv("MODEL_PATH", os.path.join(tempfile.gettempdir(), "procureai-kz", "model.pkl"))
+_detector_lock = RLock()
 
 # ── Пороговые правила (Rule Engine) ──────────────────────────────────────────
 RULES = [
@@ -109,7 +112,7 @@ class ProcurementAnomalyDetector:
             n_estimators=200,
             contamination=0.15,  # ожидаем ~15% аномальных тендеров
             random_state=42,
-            n_jobs=-1,
+            n_jobs=1,
         )
         self.model.fit(X_scaled)
         self.is_trained = True
@@ -169,7 +172,7 @@ class ProcurementAnomalyDetector:
         # decision_function: negative = anomaly, positive = normal
         # Инвертируем и нормируем в [0, 100]
         ml_score = float(np.clip((-raw_decision + 0.5) * 80, 0, 100))
-        ml_anomaly = ml_label == -1
+        ml_anomaly = bool(ml_label == -1)
 
         # 3. Feature contributions (знак deviation от среднего)
         feature_contributions = self._feature_contributions(feat_scaled[0])
@@ -195,15 +198,20 @@ class ProcurementAnomalyDetector:
         if not self.is_trained:
             self._load_or_train()
 
+        features = self.scaler.transform(df[FEATURE_COLUMNS].fillna(0).values)
+        ml_scores = np.clip((-self.model.decision_function(features) + 0.5) * 80, 0, 100)
+        anomalies = self.model.predict(features) == -1
         results = []
-        for _, row in df.iterrows():
-            r = self.analyze(row.to_dict())
+        for index, row in enumerate(df.to_dict("records")):
+            fired = [rule for rule in RULES if rule["check"](row)]
+            rule_score = min(100.0, sum(rule["weight"] for rule in fired) / TOTAL_RULE_WEIGHT * 160)
+            risk_score = round(0.55 * rule_score + 0.45 * float(ml_scores[index]), 1)
             results.append({
-                "tender_id": row.get("tender_id", ""),
-                "risk_score": r["risk_score"],
-                "risk_level": r["risk_level"],
-                "flags_count": r["flags_count"],
-                "ml_anomaly": r["ml_anomaly"],
+                "tender_id": row["tender_id"],
+                "risk_score": risk_score,
+                "risk_level": self._risk_level(risk_score),
+                "flags_count": len(fired),
+                "ml_anomaly": bool(anomalies[index]),
             })
 
         result_df = pd.DataFrame(results)
@@ -235,17 +243,21 @@ class ProcurementAnomalyDetector:
         return "НИЗКИЙ"
 
     def _save(self):
+        os.makedirs(os.path.dirname(os.path.abspath(MODEL_PATH)), exist_ok=True)
         with open(MODEL_PATH, "wb") as f:
             pickle.dump({"model": self.model, "scaler": self.scaler}, f)
         self.is_trained = True
 
     def _load_or_train(self):
         if os.path.exists(MODEL_PATH):
-            with open(MODEL_PATH, "rb") as f:
-                d = pickle.load(f)
-                self.model = d["model"]
-                self.scaler = d["scaler"]
-                self.is_trained = True
+            try:
+                with open(MODEL_PATH, "rb") as f:
+                    d = pickle.load(f)
+                    self.model = d["model"]
+                    self.scaler = d["scaler"]
+                    self.is_trained = True
+            except (OSError, EOFError, pickle.UnpicklingError, AttributeError, KeyError, ValueError):
+                self.train()
         else:
             self.train()
 
@@ -256,7 +268,9 @@ _detector: ProcurementAnomalyDetector = None
 
 def get_detector() -> ProcurementAnomalyDetector:
     global _detector
-    if _detector is None:
-        _detector = ProcurementAnomalyDetector()
-        _detector._load_or_train()
-    return _detector
+    with _detector_lock:
+        if _detector is None:
+            detector = ProcurementAnomalyDetector()
+            detector._load_or_train()
+            _detector = detector
+        return _detector
