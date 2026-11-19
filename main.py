@@ -5,7 +5,7 @@ Decentrathon 5.0 | Open Case | AI for Government
 Что решает:
   1. Анализ тендеров на аномалии (ценовые, временны́е, структурные)
   2. Скоринг риска коррупции по каждому тендеру
-  3. GPT-4o объясняет каждый флаг на языке аудитора
+  3. Gemini объясняет каждый флаг на языке аудитора
   4. REST API — инструмент поддержки принятия решений для сотрудников ККСОН/АФМ
 """
 
@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from routes import router
+from explainer import gemini_configured
 
 app = FastAPI(
     title="ProcureAI KZ",
@@ -40,8 +41,10 @@ app.include_router(router, prefix="/api/v1")
 def health():
     return {
         "status": "ok", "service": "ProcureAI KZ", "version": "1.0.0",
-        "gpt_configured": bool(os.getenv("OPENAI_API_KEY")),
-        "data_source": "synthetic", "training_enabled": bool(os.getenv("ADMIN_API_KEY")),
+        "llm_provider": "gemini", "llm_configured": gemini_configured(),
+        "gpt_configured": gemini_configured(),  # Legacy API field for existing clients.
+        "data_source": "synthetic",
+        "training_enabled": bool(os.getenv("ADMIN_API_KEY")) and os.getenv("VERCEL") != "1",
     }
 
 

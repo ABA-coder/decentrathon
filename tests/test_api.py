@@ -15,6 +15,9 @@ def client(tmp_path_factory):
     # A new disposable model; never reads or replaces the application model.
     os.environ["MODEL_PATH"] = str(tmp_path_factory.mktemp("model") / "test-model.pkl")
     os.environ.pop("OPENAI_API_KEY", None)
+    os.environ.pop("GEMINI_API_KEY", None)
+    os.environ.pop("GEMINI_MODEL", None)
+    os.environ.pop("VERCEL", None)
     os.environ.pop("ADMIN_API_KEY", None)
     from fastapi.testclient import TestClient
     from main import app
@@ -28,6 +31,8 @@ def test_home_and_health_without_secrets(client):
     health = client.get("/health").json()
     assert health["status"] == "ok"
     assert health["gpt_configured"] is False
+    assert health["llm_configured"] is False
+    assert health["llm_provider"] == "gemini"
     assert health["data_source"] == "synthetic"
 
 
@@ -67,7 +72,7 @@ def test_real_ml_analysis_and_missing_gpt_key(client):
     assert len(analysis["feature_contributions"]) == 9
     assert 0 <= analysis["risk_score"] <= 100
     assert analysis["gpt_explanation"]["source"] == "fallback"
-    assert "OPENAI_API_KEY" in analysis["gpt_explanation"]["data_gaps"]
+    assert analysis["gpt_explanation"]["error"] == "not_configured"
     tender["with_gpt_explanation"] = False
     assert client.post("/api/v1/analyze", json=tender).json()["gpt_explanation"] is None
 
@@ -101,14 +106,59 @@ def test_gpt_prompt_and_response_contract(client, monkeypatch):
         "recommended_actions": ["Проверить данные"], "data_gaps": "Реестр цен",
         "disclaimer": "Решение принимает аудитор",
     }
-    create = Mock(return_value=SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(explanation)))]))
-    monkeypatch.setenv("OPENAI_API_KEY", "test-value-not-a-real-key")
+    create = Mock(return_value=SimpleNamespace(choices=[SimpleNamespace(finish_reason="stop", message=SimpleNamespace(content=json.dumps(explanation)))]))
+    monkeypatch.setenv("GEMINI_API_KEY", "test-value-not-a-real-key")
+    monkeypatch.setenv("GEMINI_MODEL", "test-model")
     monkeypatch.setattr(explainer, "get_client", lambda: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))))
     result = explainer.generate_explanation(tender, analysis)
-    assert result["source"] == "openai"
+    assert result["source"] == "gemini"
+    assert result["model"] == create.call_args.kwargs["model"] == "test-model"
+    assert create.call_args.kwargs["response_format"]["type"] == "json_schema"
     assert tender["title"] in create.call_args.kwargs["messages"][1]["content"]
     assert "{ml_label}" not in create.call_args.kwargs["messages"][1]["content"]
     create.side_effect = RuntimeError("private provider failure")
     result = explainer.generate_explanation(tender, analysis)
     assert result["source"] == "fallback"
     assert "private provider failure" not in json.dumps(result)
+
+
+def test_gemini_client_uses_google_endpoint_and_server_key(client, monkeypatch):
+    import explainer
+    constructor = Mock()
+    monkeypatch.setenv("GEMINI_API_KEY", "test-gemini-server-key")
+    monkeypatch.setenv("OPENAI_API_KEY", "must-not-be-used")
+    monkeypatch.setattr(explainer, "OpenAI", constructor)
+    explainer.get_client.cache_clear()
+    try:
+        explainer.get_client()
+        assert constructor.call_args.kwargs["api_key"] == "test-gemini-server-key"
+        assert constructor.call_args.kwargs["base_url"] == "https://generativelanguage.googleapis.com/v1beta/openai/"
+        health = client.get("/health")
+        assert health.json()["llm_configured"] is True
+        assert "test-gemini-server-key" not in health.text
+    finally:
+        explainer.get_client.cache_clear()
+
+
+@pytest.mark.parametrize("content,finish_reason", [('{"verdict_summary":"incomplete"}', "stop"), (None, "stop"), ('{}', "length")])
+def test_invalid_gemini_output_falls_back(client, monkeypatch, content, finish_reason):
+    import explainer
+    from detector import get_detector
+    tender = client.get("/api/v1/demo").json()
+    create = Mock(return_value=SimpleNamespace(choices=[SimpleNamespace(finish_reason=finish_reason, message=SimpleNamespace(content=content))]))
+    monkeypatch.setenv("GEMINI_API_KEY", "test-value-not-a-real-key")
+    monkeypatch.setattr(explainer, "get_client", lambda: SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create))))
+    result = explainer.generate_explanation(tender, get_detector().analyze(tender))
+    assert result["source"] == "fallback"
+    assert result["error"] == "provider_error"
+
+
+def test_serverless_does_not_retrain_an_isolated_instance(client, monkeypatch):
+    import detector
+    train = Mock(side_effect=AssertionError("Training must not execute"))
+    monkeypatch.setattr(detector.ProcurementAnomalyDetector, "train", train)
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("ADMIN_API_KEY", "test-admin-only")
+    assert client.get("/health").json()["training_enabled"] is False
+    assert client.post("/api/v1/train", headers={"X-Admin-Key": "test-admin-only"}).status_code == 503
+    train.assert_not_called()

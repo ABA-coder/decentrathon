@@ -1435,7 +1435,7 @@ input, select, textarea { font-family: var(--font-ui); }
           <div class="pipeline-name">0.55×Rule + 0.45×ML</div>
         </div>
         <div class="pipeline-step" id="pipe-5">
-          <div class="pipeline-label">05 — GPT-4o</div>
+          <div class="pipeline-label">05 — Gemini</div>
           <div class="pipeline-name">Аудиторский нарратив</div>
         </div>
       </div>
@@ -1514,7 +1514,7 @@ input, select, textarea { font-family: var(--font-ui); }
             </label>
             <label class="checkbox-group">
               <input type="checkbox" id="f-gpt" checked>
-              Включить GPT-4o нарратив
+              Включить объяснение Gemini
             </label>
           </div>
 
@@ -2099,7 +2099,7 @@ function clearAnalyzeForm() {
   ['f-title','f-org','f-price','f-bids','f-days','f-markup','f-lots','f-winner','f-contract'].forEach(id => $(id).value = '');
   $('f-repeat').checked = false;
   $('f-spec').checked   = false;
-  $('f-gpt').checked = Boolean(STATE.health?.gpt_configured);
+  $('f-gpt').checked = Boolean(STATE.health?.llm_configured);
   $('analyze-result').style.display  = 'none';
   $('analyze-error').style.display   = 'none';
   ['pipe-2','pipe-3','pipe-4','pipe-5'].forEach(id => $(''+id)?.classList.remove('active'));
@@ -2281,9 +2281,9 @@ function renderAnalysisResult(r, tender) {
       <div class="card-header">
         <span class="card-title">
           <span class="card-title-icon"><svg viewBox="0 0 10 10"><path d="M2 5h6M5 2v6"/></svg></span>
-          ${gpt.source === 'openai' ? esc(gpt.model || 'GPT') + ' · Аудиторское заключение' : 'Аналитическое объяснение'}
+          ${gpt.source === 'gemini' ? 'Gemini · Аудиторское заключение' : 'Аналитическое объяснение'}
         </span>
-        <span class="tag">${gpt.source === 'openai' ? 'OpenAI' : 'По правилам'}</span>
+        <span class="tag">${gpt.source === 'gemini' ? 'Google Gemini' : 'По правилам'}</span>
       </div>
       <div class="card-body">`;
 
@@ -2438,7 +2438,7 @@ async function runRetrain() {
 /* ─── STATUS CHECK ─── */
 async function checkBackendStatus() {
   try {
-    const res = await fetch(CONFIG.API_BASE.replace('/api/v1','/health'), { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(CONFIG.API_BASE.replace('/api/v1','/health'), { signal: AbortSignal.timeout(30000) });
     STATE.backendOnline = res.ok;
     STATE.health = res.ok ? await res.json() : null;
   } catch {
@@ -2451,8 +2451,11 @@ async function checkBackendStatus() {
     dot.style.background = 'var(--green)';
     dot.style.boxShadow  = '0 0 6px var(--green)';
     text.textContent = 'Система работает';
-    $('f-gpt').checked = Boolean(STATE.health?.gpt_configured);
-    $('f-gpt').disabled = !STATE.health?.gpt_configured;
+    $('f-gpt').checked = Boolean(STATE.health?.llm_configured);
+    $('f-gpt').disabled = !STATE.health?.llm_configured;
+    $('btn-train').disabled = !STATE.health?.training_enabled;
+    $('admin-key').disabled = !STATE.health?.training_enabled;
+    $('btn-train').title = STATE.health?.training_enabled ? '' : 'Используется базовая модель';
   } else {
     dot.style.background = 'var(--amber)';
     dot.style.boxShadow  = '0 0 6px var(--amber)';
