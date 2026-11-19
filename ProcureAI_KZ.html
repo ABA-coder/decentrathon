@@ -1338,11 +1338,6 @@ input, select, textarea { font-family: var(--font-ui); }
     <!-- ═══════ DASHBOARD ═══════ -->
     <div id="page-dashboard" class="page active">
 
-      <div id="dash-dev-banner" class="dev-banner" style="display:none">
-        <span class="dev-banner-icon">⚠</span>
-        <span>Учебный датасет: 250 синтетических тендеров. Оценки рассчитывает серверная ML-модель; реестр goszakup.gov.kz не подключён.</span>
-      </div>
-
       <div class="g5" id="kpi-row">
         <div class="kpi"><div class="kpi-label">Всего тендеров</div><div class="kpi-value" id="kpi-total"><div class="skel skel-line skel-w60"></div></div><div class="kpi-sub">в датасете</div></div>
         <div class="kpi kpi-red"><div class="kpi-label">Критический риск</div><div class="kpi-value" id="kpi-critical"><div class="skel skel-line skel-w40"></div></div><div class="kpi-sub">требуют проверки</div></div>
@@ -1549,11 +1544,6 @@ input, select, textarea { font-family: var(--font-ui); }
     <!-- ═══════ TENDERS ═══════ -->
     <div id="page-tenders" class="page">
 
-      <div id="tenders-dev-banner" class="dev-banner" style="display:none">
-        <span class="dev-banner-icon">⚠</span>
-        <span>Синтетический датасет. Риск-скоры рассчитаны серверной моделью Isolation Forest.</span>
-      </div>
-
       <div class="filter-bar">
         <input class="filter-control filter-input" id="t-search" placeholder="Поиск по ID, предмету, заказчику..." oninput="filterTenders()">
         <select class="filter-control" id="t-risk" onchange="filterTenders()">
@@ -1656,7 +1646,7 @@ input, select, textarea { font-family: var(--font-ui); }
               </div>
             </div>
 
-            <div class="form-group"><label for="admin-key">Ключ администратора</label><input id="admin-key" type="password" autocomplete="off" placeholder="ADMIN_API_KEY из настроек сервера"><div class="info-note">Ключ не сохраняется в браузере. Переобучение заменит текущую модель.</div></div>
+            <div class="form-group"><label for="admin-key">Ключ администратора</label><input id="admin-key" type="password" autocomplete="off" placeholder="Введите ключ администратора"><div class="info-note">Ключ не сохраняется в браузере. Переобучение заменит текущую модель.</div></div>
             <button class="btn btn-primary" onclick="runRetrain()" id="btn-train">
               <svg viewBox="0 0 12 12"><path d="M6 1v3M3 2.5 6 1 9 2.5M3 9.5 6 11 9 9.5M6 11v-3M1.5 5 3 4M1.5 7 3 8M10.5 5 9 4M10.5 7 9 8"/></svg>
               Запустить переобучение
@@ -1831,7 +1821,7 @@ function navTo(page) {
 /* ─── DASHBOARD ─── */
 async function loadDashboard() {
   let stats = await apiFetch('/stats');
-  $('dash-dev-banner').style.display = stats.data_source === 'synthetic' ? 'flex' : 'none';
+
 
   // KPIs
   $('kpi-total').textContent   = fmtNum(stats.total_tenders);
@@ -1936,7 +1926,7 @@ function renderDashTable(items) {
 async function loadTenders() {
   let data = await apiFetch('/tenders?page_size=250');
   STATE.tenders = data.items || [];
-  $('tenders-dev-banner').style.display = 'flex';
+
 
   // Populate filters
   const regions  = [...new Set(STATE.tenders.map(t=>t.region))].sort();
@@ -2291,9 +2281,9 @@ function renderAnalysisResult(r, tender) {
       <div class="card-header">
         <span class="card-title">
           <span class="card-title-icon"><svg viewBox="0 0 10 10"><path d="M2 5h6M5 2v6"/></svg></span>
-          ${gpt.source === 'openai' ? esc(gpt.model || 'GPT') + ' · Аудиторское заключение' : 'Объяснение по правилам · GPT недоступен'}
+          ${gpt.source === 'openai' ? esc(gpt.model || 'GPT') + ' · Аудиторское заключение' : 'Аналитическое объяснение'}
         </span>
-        <span class="tag">${gpt.source === 'openai' ? 'OpenAI' : 'Без GPT'}</span>
+        <span class="tag">${gpt.source === 'openai' ? 'OpenAI' : 'По правилам'}</span>
       </div>
       <div class="card-body">`;
 
@@ -2350,11 +2340,6 @@ function renderAnalysisResult(r, tender) {
     }
 
     html += `</div></div>`;
-  } else {
-    html += `<div class="gpt-disclaimer">
-      <span class="gpt-disclaimer-icon">⚠</span>
-      <span>GPT-объяснение недоступно или отключено. Используйте числовые показатели для оценки. Окончательное заключение принимается уполномоченным аудитором.</span>
-    </div>`;
   }
 
   return html;
@@ -2465,13 +2450,13 @@ async function checkBackendStatus() {
   if (STATE.backendOnline) {
     dot.style.background = 'var(--green)';
     dot.style.boxShadow  = '0 0 6px var(--green)';
-    text.textContent = 'Сервер работает · ' + (STATE.health?.gpt_configured ? 'GPT подключён' : 'GPT не настроен');
+    text.textContent = 'Система работает';
     $('f-gpt').checked = Boolean(STATE.health?.gpt_configured);
     $('f-gpt').disabled = !STATE.health?.gpt_configured;
   } else {
     dot.style.background = 'var(--amber)';
     dot.style.boxShadow  = '0 0 6px var(--amber)';
-    text.textContent = 'Сервер недоступен';
+    text.textContent = 'Нет соединения';
   }
 }
 
