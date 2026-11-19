@@ -1,27 +1,54 @@
 """
-GPT-4o Explainability Layer — ProcureAI KZ
+Gemini Explainability Layer — ProcureAI KZ
 
 Задача: преобразовать цифровые результаты ML-детекции в
 аудиторский нарратив на русском языке, понятный сотрудникам
 ККСОН, АФМ и Счётного комитета.
 
-Архитектурный принцип: GPT не принимает решений — он объясняет
+Архитектурный принцип: Gemini не принимает решений — он объясняет
 решения, принятые детерминированными правилами и ML-моделью.
 """
 
 from openai import OpenAI
-import json
+from pydantic import BaseModel, ConfigDict
 import os
 import logging
 from functools import lru_cache
 from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
+DEFAULT_MODEL = "gemini-3.5-flash-lite"
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+
+class FlagExplanation(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    code: str
+    explanation: str
+
+
+class AuditExplanation(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    verdict_summary: str
+    risk_rationale: str
+    flag_analysis: List[FlagExplanation]
+    recommended_actions: List[str]
+    data_gaps: str
+    disclaimer: str
+
+
+def gemini_configured() -> bool:
+    return bool(os.getenv("GEMINI_API_KEY", "").strip())
 
 
 @lru_cache(maxsize=1)
 def get_client():
-    return OpenAI(timeout=20.0, max_retries=1)
+    return OpenAI(
+        api_key=os.environ["GEMINI_API_KEY"].strip(),
+        base_url=GEMINI_BASE_URL,
+        timeout=20.0,
+        max_retries=1,
+    )
 
 SYSTEM_PROMPT = """Ты — аналитическая система поддержки для аудиторов государственных закупок Казахстана.
 
@@ -76,7 +103,7 @@ def generate_explanation(
     analysis: Dict[str, Any],
 ) -> Dict[str, Any]:
     """
-    Генерирует структурированное GPT-4o объяснение результатов анализа.
+    Генерирует структурированное Gemini объяснение результатов анализа.
 
     Args:
         tender:   словарь с данными тендера
@@ -121,44 +148,35 @@ def generate_explanation(
         features_text=features_text,
     )
 
-    if not os.getenv("OPENAI_API_KEY"):
-        return _fallback_explanation(analysis, error="На сервере не настроен OPENAI_API_KEY")
+    if not gemini_configured():
+        return _fallback_explanation(analysis, error="not_configured")
 
     try:
+        model = os.getenv("GEMINI_MODEL", "").strip() or DEFAULT_MODEL
         response = get_client().chat.completions.create(
-            model=os.getenv("OPENAI_MODEL", "gpt-4o"),
+            model=model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            temperature=0.2,       # детерминированность важнее креативности
-            max_tokens=900,
-            response_format={"type": "json_object"},
+            max_tokens=2048,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "audit_explanation", "strict": True,
+                    "schema": AuditExplanation.model_json_schema(),
+                },
+            },
         )
-        raw = response.choices[0].message.content.strip()
-        explanation = json.loads(raw)
-        if not isinstance(explanation, dict):
-            raise ValueError("Expected an explanation object")
-        for key in ("verdict_summary", "risk_rationale", "data_gaps", "disclaimer"):
-            if not isinstance(explanation.get(key), str):
-                raise ValueError("Invalid explanation text")
-        if not isinstance(explanation.get("flag_analysis"), list) or not all(
-            isinstance(item, dict) and isinstance(item.get("code"), str)
-            and isinstance(item.get("explanation"), str) for item in explanation["flag_analysis"]
-        ):
-            raise ValueError("Invalid flag analysis")
-        if not isinstance(explanation.get("recommended_actions"), list) or not all(
-            isinstance(item, str) for item in explanation["recommended_actions"]
-        ):
-            raise ValueError("Invalid recommendations")
-        explanation["source"] = "openai"
-        explanation["model"] = os.getenv("OPENAI_MODEL", "gpt-4o")
-
-    except json.JSONDecodeError:
-        explanation = _fallback_explanation(analysis)
+        choice = response.choices[0]
+        if choice.finish_reason != "stop" or not choice.message.content:
+            raise ValueError("Incomplete explanation")
+        explanation = AuditExplanation.model_validate_json(choice.message.content).model_dump()
+        explanation["source"] = "gemini"
+        explanation["model"] = model
     except Exception as e:
-        logger.warning("GPT explanation unavailable: %s", type(e).__name__)
-        explanation = _fallback_explanation(analysis, error="Сервис GPT временно недоступен")
+        logger.warning("Gemini explanation unavailable: %s", type(e).__name__)
+        explanation = _fallback_explanation(analysis, error="provider_error")
 
     return explanation
 
@@ -167,17 +185,17 @@ def _fallback_explanation(
     analysis: Dict[str, Any],
     error: str = None,
 ) -> Dict[str, Any]:
-    """Структурированный фоллбэк при недоступности GPT."""
+    """Структурированное объяснение по правилам, без имитации ответа Gemini."""
     flags = analysis.get("triggered_rules", [])
     return {
         "source": "fallback",
+        "error": error,
         "verdict_summary": (
             f"Тендер получил риск-скор {analysis['risk_score']}/100 ({analysis['risk_level']}). "
             f"Сработало {len(flags)} аномальных признаков."
         ),
         "risk_rationale": (
-            "Оценка сформирована на основе детерминированных правил и модели Isolation Forest. "
-            "GPT-объяснение временно недоступно — используйте числовые показатели."
+            "Оценка сформирована на основе детерминированных правил и модели Isolation Forest."
         ),
         "flag_analysis": [
             {"code": f["code"], "explanation": f["description"]}
@@ -188,9 +206,7 @@ def _fallback_explanation(
             "Проверить аффилированность победителя с должностными лицами заказчика",
             "Изучить историю тендеров данного заказчика за последние 12 месяцев",
         ],
-        "data_gaps": "Данные о реальных рыночных ценах, реестр аффилированных лиц" + (
-            f". Ошибка GPT: {error}" if error else ""
-        ),
+        "data_gaps": "Данные о реальных рыночных ценах, реестр аффилированных лиц",
         "disclaimer": (
             "Данный анализ — инструмент поддержки принятия решений. "
             "Окончательное заключение принимается уполномоченным аудитором."

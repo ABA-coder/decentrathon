@@ -2,7 +2,7 @@
 ProcureAI KZ — API Routes
 
 Endpoints:
-  POST /analyze          — анализ одного тендера (+ GPT объяснение)
+  POST /analyze          — анализ одного тендера (+ Gemini объяснение)
   GET  /tenders          — список тендеров с риск-скорами (пагинация, фильтры)
   GET  /tenders/{id}     — детальный анализ конкретного тендера
   GET  /stats            — агрегированная статистика по датасету
@@ -142,10 +142,10 @@ class StatsResponse(BaseModel):
 @router.post("/analyze", response_model=AnalysisResponse)
 def analyze_tender(body: TenderInput):
     """
-    Полный анализ тендера: правила + ML + GPT объяснение.
+    Полный анализ тендера: правила + ML + Gemini объяснение.
     
     Возвращает риск-скор [0-100], список сработавших флагов,
-    вклады признаков и (опционально) аудиторский нарратив от GPT-4o.
+    вклады признаков и (опционально) аудиторский нарратив от Gemini.
     """
     detector = get_detector()
     tender_dict = body.model_dump(exclude={"with_gpt_explanation"})
@@ -273,6 +273,8 @@ def get_stats():
 @router.post("/train")
 def retrain(x_admin_key: Optional[str] = Header(default=None)):
     """Переобучение ML-модели на свежем датасете."""
+    if os.getenv("VERCEL") == "1":
+        raise HTTPException(status_code=503, detail="В этом окружении используется базовая модель")
     expected = os.getenv("ADMIN_API_KEY")
     if not expected:
         raise HTTPException(status_code=503, detail="Переобучение отключено: настройте ADMIN_API_KEY на сервере")
