@@ -11,9 +11,17 @@ GPT-4o Explainability Layer — ProcureAI KZ
 
 from openai import OpenAI
 import json
+import os
+import logging
+from functools import lru_cache
 from typing import Dict, Any, List
 
-client = OpenAI()  # использует OPENAI_API_KEY из окружения
+logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=1)
+def get_client():
+    return OpenAI(timeout=20.0, max_retries=1)
 
 SYSTEM_PROMPT = """Ты — аналитическая система поддержки для аудиторов государственных закупок Казахстана.
 
@@ -52,7 +60,7 @@ USER_TEMPLATE = """Проанализируй следующий тендер:
 - Итоговый риск-скор: {risk_score}/100
 - Уровень риска: {risk_level}
 - Сработало правил: {flags_count}
-- ML-модель (Isolation Forest) классифицировала как: {"АНОМАЛИЯ" if ml_anomaly else "НОРМА"}
+- ML-модель (Isolation Forest) классифицировала как: {ml_label}
 
 СРАБОТАВШИЕ ФЛАГИ:
 {flags_text}
@@ -108,14 +116,17 @@ def generate_explanation(
         risk_score=analysis["risk_score"],
         risk_level=analysis["risk_level"],
         flags_count=analysis["flags_count"],
-        ml_anomaly=analysis["ml_anomaly"],
+        ml_label="АНОМАЛИЯ" if analysis["ml_anomaly"] else "НОРМА",
         flags_text=flags_text,
         features_text=features_text,
     )
 
+    if not os.getenv("OPENAI_API_KEY"):
+        return _fallback_explanation(analysis, error="На сервере не настроен OPENAI_API_KEY")
+
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
+        response = get_client().chat.completions.create(
+            model=os.getenv("OPENAI_MODEL", "gpt-4o"),
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
@@ -126,11 +137,28 @@ def generate_explanation(
         )
         raw = response.choices[0].message.content.strip()
         explanation = json.loads(raw)
+        if not isinstance(explanation, dict):
+            raise ValueError("Expected an explanation object")
+        for key in ("verdict_summary", "risk_rationale", "data_gaps", "disclaimer"):
+            if not isinstance(explanation.get(key), str):
+                raise ValueError("Invalid explanation text")
+        if not isinstance(explanation.get("flag_analysis"), list) or not all(
+            isinstance(item, dict) and isinstance(item.get("code"), str)
+            and isinstance(item.get("explanation"), str) for item in explanation["flag_analysis"]
+        ):
+            raise ValueError("Invalid flag analysis")
+        if not isinstance(explanation.get("recommended_actions"), list) or not all(
+            isinstance(item, str) for item in explanation["recommended_actions"]
+        ):
+            raise ValueError("Invalid recommendations")
+        explanation["source"] = "openai"
+        explanation["model"] = os.getenv("OPENAI_MODEL", "gpt-4o")
 
     except json.JSONDecodeError:
         explanation = _fallback_explanation(analysis)
     except Exception as e:
-        explanation = _fallback_explanation(analysis, error=str(e))
+        logger.warning("GPT explanation unavailable: %s", type(e).__name__)
+        explanation = _fallback_explanation(analysis, error="Сервис GPT временно недоступен")
 
     return explanation
 
@@ -142,6 +170,7 @@ def _fallback_explanation(
     """Структурированный фоллбэк при недоступности GPT."""
     flags = analysis.get("triggered_rules", [])
     return {
+        "source": "fallback",
         "verdict_summary": (
             f"Тендер получил риск-скор {analysis['risk_score']}/100 ({analysis['risk_level']}). "
             f"Сработало {len(flags)} аномальных признаков."
