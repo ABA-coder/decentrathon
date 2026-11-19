@@ -1,4 +1,7 @@
 # 🔍 ProcureAI KZ
+
+**Сайт:** https://procureai-kz-decentrathon.vercel.app
+
 ### ИИ-система выявления аномалий в государственных закупках Казахстана
 **Decentrathon 5.0 · Open Case · AI for Government**
 
