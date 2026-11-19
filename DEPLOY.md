@@ -16,9 +16,7 @@ FastAPI обслуживает сайт и API с одного адреса. Iso
 ## Vercel
 
 1. Импортировать GitHub-репозиторий `ABA-coder/decentrathon` в Vercel.
-2. Выбрать ветку `codex/procureai-full-deploy` и корневую папку репозитория.
-   Если импорт предлагает только main, задать нужную Production Branch в настройках
-   и запустить деплой этой ветки.
+2. Выбрать ветку `main` и корневую папку репозитория.
 3. Framework Preset: **FastAPI**. Остальные параметры сборки оставить стандартными.
    Точка входа — `main.py`, версия Python — 3.12 из `.python-version`,
    зависимости устанавливаются из `requirements.txt`.
