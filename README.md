@@ -41,22 +41,18 @@
 
 ## 🏗️ Архитектура
 
-```
-procure-ai/
-├── backend/
-│   ├── main.py                  # FastAPI entrypoint
-│   ├── api/
-│   │   └── routes.py            # REST endpoints (7 штук)
-│   ├── core/
-│   │   └── explainer.py         # GPT-4o объяснение (structured JSON)
-│   ├── models/
-│   │   └── detector.py          # Rule Engine + IsolationForest
-│   ├── data/
-│   │   └── dataset.py           # Синтетика (→ goszakup.gov.kz в prod)
-│   ├── requirements.txt
-│   └── Dockerfile
-├── docker-compose.yml
-└── README.md
+```text
+decentrathon/
+├── main.py                 # FastAPI + выдача HTML
+├── routes.py               # API, статистика, фильтры, административное переобучение
+├── detector.py             # Rule Engine + Isolation Forest
+├── explainer.py            # GPT-объяснения и явно обозначенный fallback
+├── dataset.py              # Синтетический набор тендеров
+├── ProcureAI_KZ.html        # Интерфейс, использующий /api/v1
+├── requirements.txt
+├── render.yaml
+├── DEPLOY.md
+└── tests/test_api.py
 ```
 
 ### Стек технологий
@@ -69,26 +65,20 @@ procure-ai/
 
 ## 🚀 Быстрый запуск
 
-### Docker (рекомендуется)
+Актуальная версия запускает сайт и API одним Python-процессом из корня репозитория:
+
 ```bash
-git clone https://github.com/your-team/procure-ai-kz
-cd procure-ai-kz
-echo "OPENAI_API_KEY=sk-..." > .env
-docker-compose up --build
+pip install -r requirements.txt
+python main.py
+# Сайт: http://localhost:8000
 # API: http://localhost:8000/docs
 ```
 
-### Локально
-```bash
-cd backend
-pip install -r requirements.txt
-export OPENAI_API_KEY=sk-...
-python main.py
-# → http://localhost:8000/docs
-```
+Для GPT задайте серверную переменную окружения `OPENAI_API_KEY`.
+ML и правила работают без ключа; состояние GPT отображается отдельно.
+Деплой на Render описан в [DEPLOY.md](DEPLOY.md), конфигурация — `render.yaml`.
 
 ---
-
 ## 📡 API Эндпоинты
 
 | Method | Path | Описание |

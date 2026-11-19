@@ -1228,6 +1228,34 @@ input, select, textarea { font-family: var(--font-ui); }
 }
 .result-meta-item strong { font-family: var(--font-mono); color: var(--text-secondary); }
 
+
+/* Responsive layouts preserve navigation and horizontally scroll wide tables. */
+#main, .card, .g2 > *, .g3 > *, .g5 > * { min-width: 0; }
+.nav-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (max-width: 1100px) {
+  .g5 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .g3 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  body { display: block; }
+  #sidebar { position: relative; width: 100%; min-height: auto; }
+  .nav-section { display: flex; flex-wrap: wrap; padding: 6px 8px; gap: 4px; }
+  .nav-label { width: 100%; }
+  .nav-item { padding: 10px; }
+  .sidebar-footer { margin-top: 0; }
+  #main { margin-left: 0; width: 100%; }
+  #topbar { height: auto; min-height: 50px; gap: 12px; padding: 12px; flex-wrap: wrap; }
+  .topbar-breadcrumb, .topbar-sep { display: none; }
+  #content { padding: 14px; }
+  .g2, .form-grid, .form-grid-3, .analysis-layout, .result-top { grid-template-columns: minmax(0, 1fr); }
+  .g5 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pipeline { overflow-x: auto; }
+  .pipeline-step { min-width: 125px; }
+  .filter-bar { flex-wrap: wrap; }
+  input, select, textarea { font-size: 16px; max-width: 100%; }
+  .filter-bar > * { min-width: 0; max-width: 100%; }
+  .table-wrap table { min-width: 900px; }
+}
 </style>
 </head>
 <body>
@@ -1305,13 +1333,14 @@ input, select, textarea { font-family: var(--font-ui); }
   </header>
 
   <div id="content">
+<div id="api-error" class="dev-banner" role="alert" style="display:none"></div>
 
     <!-- ═══════ DASHBOARD ═══════ -->
     <div id="page-dashboard" class="page active">
 
       <div id="dash-dev-banner" class="dev-banner" style="display:none">
         <span class="dev-banner-icon">⚠</span>
-        <span>Режим DEMO — данные синтетические. Подключите backend (/api/v1) для работы с реальными тендерами.</span>
+        <span>Учебный датасет: 250 синтетических тендеров. Оценки рассчитывает серверная ML-модель; реестр goszakup.gov.kz не подключён.</span>
       </div>
 
       <div class="g5" id="kpi-row">
@@ -1522,7 +1551,7 @@ input, select, textarea { font-family: var(--font-ui); }
 
       <div id="tenders-dev-banner" class="dev-banner" style="display:none">
         <span class="dev-banner-icon">⚠</span>
-        <span>Режим DEMO — синтетические данные. Backend недоступен.</span>
+        <span>Синтетический датасет. Риск-скоры рассчитаны серверной моделью Isolation Forest.</span>
       </div>
 
       <div class="filter-bar">
@@ -1627,6 +1656,7 @@ input, select, textarea { font-family: var(--font-ui); }
               </div>
             </div>
 
+            <div class="form-group"><label for="admin-key">Ключ администратора</label><input id="admin-key" type="password" autocomplete="off" placeholder="ADMIN_API_KEY из настроек сервера"><div class="info-note">Ключ не сохраняется в браузере. Переобучение заменит текущую модель.</div></div>
             <button class="btn btn-primary" onclick="runRetrain()" id="btn-train">
               <svg viewBox="0 0 12 12"><path d="M6 1v3M3 2.5 6 1 9 2.5M3 9.5 6 11 9 9.5M6 11v-3M1.5 5 3 4M1.5 7 3 8M10.5 5 9 4M10.5 7 9 8"/></svg>
               Запустить переобучение
@@ -1688,9 +1718,8 @@ const CONFIG = {
     const meta = document.querySelector('meta[name="api-base"]');
     if (meta) return meta.content;
     // Dev: try localhost; in production, set API_BASE via server-side template
-    return 'http://localhost:8000/api/v1';
+    return '/api/v1';
   })(),
-  MOCK_MODE: false, // set to true only in dev if backend is unavailable
   PAGE_SIZE: 20,
 };
 
@@ -1743,174 +1772,38 @@ function scoreClass(lvl) {
 }
 
 /* ─── API LAYER ─── */
+function showApiError(error) {
+  const banner = $('api-error');
+  banner.textContent = error?.message || 'Не удалось связаться с сервером. Повторите попытку.';
+  banner.style.display = 'flex';
+}
+window.addEventListener('unhandledrejection', event => {
+  event.preventDefault();
+  showApiError(event.reason);
+});
 async function apiFetch(path, opts = {}) {
+  $('api-error').style.display = 'none';
+  let res;
   try {
-    const url = CONFIG.API_BASE + path;
-    const res = await fetch(url, {
-      ...opts,
+    res = await fetch(CONFIG.API_BASE + path, {
+      ...opts, signal: AbortSignal.timeout(60000),
       headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }));
-      throw new Error(err.detail || `HTTP ${res.status}`);
-    }
-    return await res.json();
-  } catch (e) {
-    if (e.name === 'TypeError' || e.message.includes('fetch')) {
-      // Network failure — backend offline
-      return null;
-    }
-    throw e;
+  } catch {
+    throw new Error('Сервер недоступен или отвечает слишком долго. Повторите запрос.');
   }
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const detail = body?.detail;
+    throw new Error(Array.isArray(detail)
+      ? detail.map(item => item.loc.slice(1).join('.') + ': ' + item.msg).join('; ')
+      : typeof detail === 'string' ? detail : 'Ошибка API: ' + res.status);
+  }
+  if (body === null) throw new Error('Сервер вернул некорректный ответ.');
+  return body;
 }
 
-/* ─── MOCK DATA ─── */
-const MOCK = (() => {
-  const CATS = ['Строительные работы','IT-услуги и ПО','Медицинское оборудование',
-    'Продукты питания','Офисные товары','Транспортные услуги',
-    'Консультационные услуги','Охранные услуги','Дорожный ремонт','Фармацевтика'];
-  const ORGS = ['Министерство здравоохранения РК','Министерство образования РК',
-    'Акимат г. Алматы','Акимат г. Астаны','МВД РК','КазМунайГаз',
-    'Самрук-Казына','КазАвтоЖол','Акимат Карагандинской области','Управление здравоохранения ВКО'];
-  const REGIONS = ['Астана','Алматы','Шымкент','Актобе','Тараз',
-    'Павлодар','Усть-Каменогорск','Семей','Атырау','Кызылорда'];
-  const WINNERS = ['ТОО «АлтынСтрой»','ТОО «КазТехСервис»','ТОО «НурСнаб»',
-    'ТОО «БерекеПром»','ТОО «МегаСтрой KZ»','ТОО «АкжолКонсалт»','ТОО «ДиджиталКЗ»'];
-  const VERBS  = ['поставка','оказание услуг','выполнение работ'];
-  const LEVELS = ['КРИТИЧЕСКИЙ','ВЫСОКИЙ','СРЕДНИЙ','НИЗКИЙ'];
-  const W = [.15,.27,.36,.22];
-
-  function rng(seed) {
-    let s = seed;
-    return () => { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; };
-  }
-
-  function genTenders(n = 250, seed = 42) {
-    const r = rng(seed);
-    const pick = arr => arr[Math.floor(r() * arr.length)];
-    const tenders = [];
-    for (let i = 0; i < n; i++) {
-      const rnd = r();
-      let lvlIdx = 3, cum = 0;
-      for (let j = 0; j < W.length; j++) { cum += W[j]; if (rnd < cum) { lvlIdx = j; break; } }
-      const score = lvlIdx === 0 ? 70+r()*30 : lvlIdx === 1 ? 45+r()*25 : lvlIdx === 2 ? 20+r()*25 : r()*20;
-      const flags = lvlIdx === 0 ? 3+Math.floor(r()*4) : lvlIdx === 1 ? 2+Math.floor(r()*3) : Math.floor(r()*3);
-      const bids  = r() < .25 ? 1 : 2+Math.floor(r()*10);
-      const cat   = pick(CATS), reg = pick(REGIONS), org = pick(ORGS);
-      tenders.push({
-        tender_id:            `KZ-2024-${String(i+1).padStart(5,'0')}`,
-        title:                `${cat}: ${pick(VERBS)} (${reg})`,
-        customer_org:         org,
-        region:               reg,
-        category:             cat,
-        initial_price_kzt:    Math.floor(500_000 + r() * 800_000_000),
-        bid_count:            bids,
-        risk_score:           Math.round(score * 10) / 10,
-        risk_level:           LEVELS[lvlIdx],
-        flags_count:          flags,
-        ml_anomaly:           lvlIdx <= 1,
-        submission_days:      r() < .2 ? Math.floor(1+r()*4) : Math.floor(10+r()*35),
-        repeat_winner:        r() < .15 ? 1 : 0,
-        lot_count:            r() < .12 ? Math.floor(8+r()*18) : Math.floor(1+r()*4),
-        spec_tailored:        r() < .14 ? 1 : 0,
-        price_markup_pct:     r() < .18 ? Math.round((35+r()*145)*10)/10 : Math.round((-10+r()*30)*10)/10,
-        winner_name:          pick(WINNERS),
-        contract_duration_days: Math.floor(30+r()*700),
-      });
-    }
-    return tenders.sort((a,b) => b.risk_score - a.risk_score);
-  }
-
-  function genStats(tenders) {
-    const levels = {};
-    tenders.forEach(t => { levels[t.risk_level] = (levels[t.risk_level]||0)+1; });
-    const flagged = tenders.filter(t => t.risk_level === 'КРИТИЧЕСКИЙ' || t.risk_level === 'ВЫСОКИЙ');
-    const catCounts = {};
-    flagged.forEach(t => { catCounts[t.category] = (catCounts[t.category]||0)+1; });
-    const topCat = Object.entries(catCounts).sort((a,b)=>b[1]-a[1])[0];
-    const orgCounts = {};
-    flagged.forEach(t => { orgCounts[t.customer_org] = (orgCounts[t.customer_org]||0)+1; });
-    const topOrg = Object.entries(orgCounts).sort((a,b)=>b[1]-a[1])[0];
-    return {
-      total_tenders: tenders.length,
-      critical_count: levels['КРИТИЧЕСКИЙ']||0,
-      high_count:     levels['ВЫСОКИЙ']||0,
-      medium_count:   levels['СРЕДНИЙ']||0,
-      low_count:      levels['НИЗКИЙ']||0,
-      total_value_kzt: tenders.reduce((s,t)=>s+t.initial_price_kzt,0),
-      anomaly_rate_pct: Math.round(tenders.filter(t=>t.ml_anomaly).length/tenders.length*1000)/10,
-      top_flagged_category: topCat ? topCat[0] : '—',
-      top_flagged_org: topOrg ? topOrg[0] : '—',
-      _orgCounts: orgCounts,
-      _catCounts: catCounts,
-      _regionCounts: (() => {
-        const rc = {};
-        flagged.forEach(t => { rc[t.region] = (rc[t.region]||0)+1; });
-        return rc;
-      })(),
-    };
-  }
-
-  const _tenders = genTenders();
-  const _stats   = genStats(_tenders);
-  return { tenders: _tenders, stats: _stats };
-})();
-
-function mockAnalysis(tender) {
-  const RULE_DEFS = [
-    {id:'R1',code:'A1',label:'Единственная заявка',description:'Подана только одна заявка — возможная аффилированность или ограничение конкуренции',weight:20,check:t=>t.bid_count==1},
-    {id:'R2',code:'A2',label:'Завышение начальной цены',description:'Начальная цена превышает рыночный ориентир более чем на 30%',weight:25,check:t=>(t.price_markup_pct||0)>30},
-    {id:'R3',code:'A3',label:'Сжатые сроки подачи',description:'Срок приёма заявок менее 5 рабочих дней — ограничивает доступ участников',weight:18,check:t=>t.submission_days<5},
-    {id:'R4',code:'A4',label:'Повторяющийся победитель',description:'Один и тот же поставщик побеждает у данного заказчика без конкурса',weight:22,check:t=>!!t.repeat_winner},
-    {id:'R5',code:'A5',label:'Дробление лота',description:'Необычно большое число лотов — признак разбивки крупного контракта для обхода порогов',weight:15,check:t=>(t.lot_count||1)>=8},
-    {id:'R6',code:'A6',label:'ТЗ под конкретного поставщика',description:'Технические требования содержат признаки заточенности под одного исполнителя',weight:20,check:t=>!!t.spec_tailored},
-  ];
-  const triggered = RULE_DEFS.filter(r=>r.check(tender)).map(r=>({rule_id:r.id,code:r.code,label:r.label,description:r.description,weight:r.weight}));
-  const wSum = triggered.reduce((s,r)=>s+r.weight,0);
-  const ruleScore = Math.min(100,(wSum/120)*100*1.6);
-  const mlScore   = triggered.length>=3 ? 55+Math.random()*30 : Math.random()*40;
-  const riskScore = Math.round((0.55*ruleScore+0.45*mlScore)*10)/10;
-  const lvl = riskScore>=70?'КРИТИЧЕСКИЙ':riskScore>=45?'ВЫСОКИЙ':riskScore>=20?'СРЕДНИЙ':'НИЗКИЙ';
-  const features = [
-    {feature:'bid_count',label:'Количество заявок',z_score:tender.bid_count===1?2.8:-0.3,direction:tender.bid_count===1?'высокий':'норма'},
-    {feature:'price_markup_pct',label:'Завышение цены',z_score:Math.round(((tender.price_markup_pct||0)-15)/20*100)/100,direction:(tender.price_markup_pct||0)>30?'высокий':'норма'},
-    {feature:'submission_days',label:'Срок подачи',z_score:tender.submission_days<5?-2.5:0.4,direction:tender.submission_days<5?'низкий':'норма'},
-    {feature:'repeat_winner',label:'Повторный победитель',z_score:tender.repeat_winner?1.9:-0.2,direction:tender.repeat_winner?'высокий':'норма'},
-    {feature:'lot_count',label:'Количество лотов',z_score:Math.round(((tender.lot_count||1)-3)/2*100)/100,direction:(tender.lot_count||1)>=8?'высокий':'норма'},
-    {feature:'spec_tailored',label:'ТЗ под поставщика',z_score:tender.spec_tailored?2.1:-0.1,direction:tender.spec_tailored?'высокий':'норма'},
-    {feature:'initial_price_kzt',label:'Начальная цена',z_score:Math.round(Math.log10(tender.initial_price_kzt||1)/Math.log10(1e8)*100)/100,direction:'норма'},
-    {feature:'contract_duration_days',label:'Срок контракта',z_score:Math.round((tender.contract_duration_days||180)/365*100)/100,direction:'норма'},
-  ].sort((a,b)=>Math.abs(b.z_score)-Math.abs(a.z_score));
-
-  const gpt = triggered.length > 0 ? {
-    verdict_summary: `Тендер демонстрирует ${triggered.length} из 6 признаков нарушения конкурентных процедур. Риск-скор ${riskScore}/100 (${lvl}).`,
-    risk_rationale: `Rule Engine зафиксировал совпадение ${triggered.length} правил (суммарный вес ${wSum}/120). ML-модель ${mlScore>50?'подтвердила аномальность профиля':'не выявила статистических отклонений'} тендера.`,
-    flag_analysis: triggered.map(r=>({code:r.code,explanation:r.description})),
-    recommended_actions: [
-      'Запросить у заказчика обоснование начальной цены контракта',
-      'Проверить аффилированность победителя с должностными лицами заказчика',
-      'Изучить историю тендеров данного заказчика за последние 12 месяцев',
-      'Провести мониторинг исполнения контракта',
-    ],
-    data_gaps: 'Данные о реальных рыночных ценах, реестр аффилированных лиц (БИН), история предыдущих тендеров заказчика',
-    disclaimer: 'Данный анализ — инструмент поддержки принятия решений. Окончательное заключение принимается уполномоченным аудитором.',
-  } : null;
-
-  return {
-    tender_id: tender.tender_id||'—',
-    title: tender.title||'—',
-    customer_org: tender.customer_org||'—',
-    risk_score: riskScore,
-    risk_level: lvl,
-    rule_score: Math.round(ruleScore*10)/10,
-    ml_score:   Math.round(mlScore*10)/10,
-    ml_anomaly: mlScore > 50,
-    triggered_rules: triggered,
-    feature_contributions: features,
-    flags_count: triggered.length,
-    gpt_explanation: gpt,
-  };
-}
+/* Live API data: demo responses are never substituted for a server failure. */
 
 /* ─── NAVIGATION ─── */
 const PAGE_META = {
@@ -1938,12 +1831,7 @@ function navTo(page) {
 /* ─── DASHBOARD ─── */
 async function loadDashboard() {
   let stats = await apiFetch('/stats');
-  const isMock = stats === null;
-  if (isMock) {
-    stats = MOCK.stats;
-    $('dash-dev-banner').style.display = 'flex';
-    CONFIG.MOCK_MODE = true;
-  }
+  $('dash-dev-banner').style.display = stats.data_source === 'synthetic' ? 'flex' : 'none';
 
   // KPIs
   $('kpi-total').textContent   = fmtNum(stats.total_tenders);
@@ -1976,9 +1864,8 @@ async function loadDashboard() {
   }).join('') + `<div class="info-note" style="margin-top:10px">Распределение ${fmtNum(total)} тендеров по уровню риска</div>`;
 
   // Top categories
-  const catData = isMock && stats._catCounts
-    ? Object.entries(stats._catCounts).sort((a,b)=>b[1]-a[1]).slice(0,6)
-    : [['Строительные работы',42],['IT-услуги и ПО',31],['Дорожный ремонт',28],['Медицинское оборудование',22],['Фармацевтика',17],['Транспортные услуги',14]];
+  const catData = Object.entries(stats.category_counts || {}).sort((a,b)=>b[1]-a[1]).slice(0,6);
+
   const maxCat = catData[0]?.[1] || 1;
   $('dash-top-cats').innerHTML = catData.map(([cat, cnt]) =>
     `<div class="hbar-row">
@@ -1989,12 +1876,8 @@ async function loadDashboard() {
   ).join('');
 
   // Top orgs
-  const orgData = isMock && stats._orgCounts
-    ? Object.entries(stats._orgCounts).sort((a,b)=>b[1]-a[1]).slice(0,6)
-    : Object.entries({
-      'Акимат г. Алматы':12,'Министерство здравоохранения РК':9,'КазАвтоЖол':8,
-      'Акимат Карагандинской области':7,'МВД РК':6,'Самрук-Казына':5
-    });
+  const orgData = Object.entries(stats.org_counts || {}).sort((a,b)=>b[1]-a[1]).slice(0,6);
+
   $('dash-top-orgs').innerHTML = orgData.map(([org, cnt], i) =>
     `<div class="org-row">
       <span class="org-rank">${i+1}</span>
@@ -2004,9 +1887,8 @@ async function loadDashboard() {
   ).join('');
 
   // Regions
-  const regData = isMock && stats._regionCounts
-    ? Object.entries(stats._regionCounts).sort((a,b)=>b[1]-a[1]).slice(0,6)
-    : [['Алматы',18],['Астана',15],['Шымкент',11],['Актобе',8],['Павлодар',6],['Кызылорда',5]];
+  const regData = Object.entries(stats.region_counts || {}).sort((a,b)=>b[1]-a[1]).slice(0,6);
+
   const maxReg = regData[0]?.[1] || 1;
   $('dash-regions').innerHTML = regData.map(([reg, cnt]) =>
     `<div class="hbar-row">
@@ -2017,13 +1899,8 @@ async function loadDashboard() {
   ).join('');
 
   // Top 10 table
-  let topData;
-  if (!isMock) {
-    const res = await apiFetch('/tenders?page_size=10&risk_level=КРИТИЧЕСКИЙ');
-    topData = res?.items || MOCK.tenders.slice(0,10);
-  } else {
-    topData = MOCK.tenders.slice(0,10);
-  }
+  const topData = (await apiFetch('/tenders?page_size=10')).items;
+
   renderDashTable(topData);
 }
 
@@ -2058,20 +1935,18 @@ function renderDashTable(items) {
 /* ─── TENDERS PAGE ─── */
 async function loadTenders() {
   let data = await apiFetch('/tenders?page_size=250');
-  if (data === null) {
-    $('tenders-dev-banner').style.display = 'flex';
-    STATE.tenders = MOCK.tenders;
-  } else {
-    STATE.tenders = data.items || [];
-  }
+  STATE.tenders = data.items || [];
+  $('tenders-dev-banner').style.display = 'flex';
 
   // Populate filters
   const regions  = [...new Set(STATE.tenders.map(t=>t.region))].sort();
   const cats     = [...new Set(STATE.tenders.map(t=>t.category))].sort();
   const rSel = $('t-region'), cSel = $('t-category');
+  rSel.length = 1; cSel.length = 1;
   regions.forEach(r => { const o=document.createElement('option'); o.value=o.textContent=r; rSel.appendChild(o); });
   cats.forEach(c   => { const o=document.createElement('option'); o.value=o.textContent=c; cSel.appendChild(o); });
 
+  STATE.currentPage = 1;
   STATE.filteredTenders = [...STATE.tenders];
   renderTendersPage();
 }
@@ -2105,6 +1980,7 @@ function sortTenders(key) {
     STATE.sortDir = 'desc';
   }
   // Update indicators
+  document.querySelectorAll('[id^=sort-]').forEach(node => { node.textContent = ''; });
   Object.keys(_sortIndicators).forEach(k => {
     const el = $(`sort-${k}`);
     if (el) el.textContent = '';
@@ -2122,6 +1998,11 @@ function sortTenders(key) {
 }
 
 function renderTendersPage() {
+  const direction = STATE.sortDir === 'desc' ? -1 : 1;
+  STATE.filteredTenders.sort((a,b) => {
+    const av = a[STATE.sortKey], bv = b[STATE.sortKey];
+    return direction * (typeof av === 'number' ? av - bv : String(av || '').localeCompare(String(bv || ''), 'ru'));
+  });
   const total = STATE.filteredTenders.length;
   $('t-count').textContent = `${fmtNum(total)} тендеров`;
 
@@ -2158,7 +2039,7 @@ function renderTendersPage() {
   // Pagination
   const totalPages = Math.ceil(total / CONFIG.PAGE_SIZE);
   const cp = STATE.currentPage;
-  let paginationHTML = `<span class="pg-info">${start+1}–${Math.min(start+CONFIG.PAGE_SIZE, total)} из ${fmtNum(total)}</span>`;
+  let paginationHTML = `<span class="pg-info">${total ? start+1 : 0}–${Math.min(start+CONFIG.PAGE_SIZE, total)} из ${fmtNum(total)}</span>`;
 
   if (totalPages > 1) {
     const pages = [];
@@ -2187,9 +2068,9 @@ function goPage(p) {
 }
 
 /* ─── TENDER DETAIL (open in analyze) ─── */
-function openTenderDetail(id) {
-  const t = STATE.tenders.find(x => x.tender_id === id) || MOCK.tenders.find(x => x.tender_id === id);
-  if (!t) return;
+async function openTenderDetail(id) {
+  const detail = await apiFetch('/tenders/' + encodeURIComponent(id));
+  const t = detail.tender;
   navTo('analyze');
 
   $('f-title').value    = t.title || '';
@@ -2203,8 +2084,10 @@ function openTenderDetail(id) {
   $('f-contract').value = t.contract_duration_days || 180;
   $('f-repeat').checked = !!t.repeat_winner;
   $('f-spec').checked   = !!t.spec_tailored;
-
-  runAnalysis();
+  $('f-region').value = t.region;
+  $('analyze-error').style.display = 'none';
+  $('analyze-result').innerHTML = renderAnalysisResult({...detail.analysis, gpt_explanation: detail.gpt_explanation}, t);
+  $('analyze-result').style.display = 'block';
 }
 
 /* ─── ANALYZE FORM ─── */
@@ -2226,7 +2109,7 @@ function clearAnalyzeForm() {
   ['f-title','f-org','f-price','f-bids','f-days','f-markup','f-lots','f-winner','f-contract'].forEach(id => $(id).value = '');
   $('f-repeat').checked = false;
   $('f-spec').checked   = false;
-  $('f-gpt').checked    = true;
+  $('f-gpt').checked = Boolean(STATE.health?.gpt_configured);
   $('analyze-result').style.display  = 'none';
   $('analyze-error').style.display   = 'none';
   ['pipe-2','pipe-3','pipe-4','pipe-5'].forEach(id => $(''+id)?.classList.remove('active'));
@@ -2297,7 +2180,6 @@ async function runAnalysis() {
     return;
   }
 
-  if (result === null) result = mockAnalysis(tender);
 
   $('analyze-loading').style.display = 'none';
   $('btn-analyze').disabled = false;
@@ -2409,9 +2291,9 @@ function renderAnalysisResult(r, tender) {
       <div class="card-header">
         <span class="card-title">
           <span class="card-title-icon"><svg viewBox="0 0 10 10"><path d="M2 5h6M5 2v6"/></svg></span>
-          GPT-4o · Аудиторское заключение
+          ${gpt.source === 'openai' ? esc(gpt.model || 'GPT') + ' · Аудиторское заключение' : 'Объяснение по правилам · GPT недоступен'}
         </span>
-        <span class="tag">temperature=0.2</span>
+        <span class="tag">${gpt.source === 'openai' ? 'OpenAI' : 'Без GPT'}</span>
       </div>
       <div class="card-body">`;
 
@@ -2481,6 +2363,7 @@ function renderAnalysisResult(r, tender) {
 async function loadDemoAnalysis() {
   navTo('analyze');
   const demoData = await apiFetch('/demo');
+  $('f-region').value = demoData.region;
   if (demoData) {
     $('f-title').value    = demoData.title;
     $('f-org').value      = demoData.customer_org;
@@ -2544,44 +2427,27 @@ async function loadRules() {
 
 /* ─── TRAIN PAGE ─── */
 async function runRetrain() {
+  const key = $('admin-key').value.trim();
+  if (!key) { showApiError(new Error('Введите ключ администратора для переобучения.')); return; }
   const btn = $('btn-train');
   btn.disabled = true;
   $('train-loading').style.display = 'flex';
-  $('train-result').style.display  = 'none';
-
-  let result = null;
+  $('train-result').style.display = 'none';
   try {
-    result = await apiFetch('/train', { method: 'POST' });
-  } catch(e) {
-    result = null;
+    const result = await apiFetch('/train', { method: 'POST', headers: { 'X-Admin-Key': key } });
+    const metrics = result.metrics;
+    $('train-result').textContent = 'Модель обучена. Образцов: ' + metrics.train_samples +
+      '. Доля аномалий: ' + metrics.anomaly_rate_pct + '%. Алгоритм: ' + metrics.model;
+    $('train-result').style.display = 'block';
+    STATE.tenders = [];
+    await loadDashboard();
+  } catch (error) {
+    showApiError(error);
+  } finally {
+    $('admin-key').value = '';
+    $('train-loading').style.display = 'none';
+    btn.disabled = false;
   }
-
-  $('train-loading').style.display = 'none';
-  btn.disabled = false;
-
-  const isMock = result === null;
-  const metrics = result?.metrics || {
-    train_samples: 600,
-    anomaly_rate_pct: 16.3,
-    model: 'IsolationForest',
-    features: ['bid_count','single_bid','price_markup_pct','submission_days','repeat_winner','lot_count','spec_tailored','contract_duration_days','initial_price_kzt'],
-  };
-
-  $('train-result').innerHTML = `
-    <div class="state-success mb12">
-      ✓ Модель успешно обучена${isMock?' (симуляция — backend недоступен)':''}
-    </div>
-    <div class="card" style="border-radius:var(--radius-md)">
-      <div class="card-body-sm">
-        <div class="metric-table">
-          <div class="metric-row"><span class="metric-key">Образцов обучения</span><span class="metric-val">${metrics.train_samples}</span></div>
-          <div class="metric-row"><span class="metric-key">Доля аномалий</span><span class="metric-val">${metrics.anomaly_rate_pct}%</span></div>
-          <div class="metric-row"><span class="metric-key">Алгоритм</span><span class="metric-val">${metrics.model}</span></div>
-          <div class="metric-row"><span class="metric-key">Признаков</span><span class="metric-val">${Array.isArray(metrics.features)?metrics.features.length:9}</span></div>
-        </div>
-      </div>
-    </div>`;
-  $('train-result').style.display = 'block';
 }
 
 /* ─── STATUS CHECK ─── */
@@ -2589,6 +2455,7 @@ async function checkBackendStatus() {
   try {
     const res = await fetch(CONFIG.API_BASE.replace('/api/v1','/health'), { signal: AbortSignal.timeout(3000) });
     STATE.backendOnline = res.ok;
+    STATE.health = res.ok ? await res.json() : null;
   } catch {
     STATE.backendOnline = false;
   }
@@ -2598,14 +2465,23 @@ async function checkBackendStatus() {
   if (STATE.backendOnline) {
     dot.style.background = 'var(--green)';
     dot.style.boxShadow  = '0 0 6px var(--green)';
-    text.textContent = 'Backend online · IF v2';
+    text.textContent = 'Сервер работает · ' + (STATE.health?.gpt_configured ? 'GPT подключён' : 'GPT не настроен');
+    $('f-gpt').checked = Boolean(STATE.health?.gpt_configured);
+    $('f-gpt').disabled = !STATE.health?.gpt_configured;
   } else {
     dot.style.background = 'var(--amber)';
     dot.style.boxShadow  = '0 0 6px var(--amber)';
-    text.textContent = 'Demo mode · офлайн';
+    text.textContent = 'Сервер недоступен';
   }
 }
 
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.tabIndex = 0;
+  item.setAttribute('role', 'button');
+  item.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); item.click(); }
+  });
+});
 /* ─── INIT ─── */
 (async () => {
   await checkBackendStatus();
