@@ -3,6 +3,16 @@
 FastAPI обслуживает сайт и API с одного адреса. Isolation Forest считает риск на сервере,
 а Gemini объясняет результат. Gemini не обучается и не меняет числовой риск-скор.
 
+## Опубликованная версия
+
+- Сайт: https://procureai-kz-decentrathon.vercel.app
+- Vercel: команда `bookingapp2`, проект `procureai-kz-decentrathon`, окружение Production.
+- Код опубликован прямой загрузкой файлов. Связь Vercel с GitHub пока не настроена,
+  поэтому новые коммиты сами по себе не обновляют сайт. Для автодеплоя нужно подключить
+  GitHub-интеграцию Vercel к `ABA-coder/decentrathon` и выбрать ветку с исправлениями.
+- `GEMINI_API_KEY` хранится в Vercel как серверный Secret для Production.
+  После замены ключа нужен Redeploy; обычный Redeploy повторно публикует текущие файлы.
+
 ## Vercel
 
 1. Импортировать GitHub-репозиторий `ABA-coder/decentrathon` в Vercel.
